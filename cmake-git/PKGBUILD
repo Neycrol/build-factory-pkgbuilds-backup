@@ -1,0 +1,104 @@
+# $Id$
+# Maintainer: Piotr Gorski <lucjan.lucjanov@gmail.com>
+# Contributor: Ysblokje <ysblokje at gmail dot com>
+# Contributor: Felix Yan <felixonmars@archlinux.org>
+# Contributor: Andrea Scarpino <andrea@archlinux.org>
+# Contributor: Pierre Schmitz <pierre@archlinux.de>
+# Contributor: Christoph Viebig <oss@christoph-viebig.de>
+#
+# This PKGBUILD is based on the official Arch cmake package.
+
+pkgname=cmake-git-god
+pkgver=4.2.1.737.g824f2a7a20
+pkgrel=1
+pkgdesc='A cross-platform open-source make system (God Mode Build with GCC 16, CLI Only)'
+arch=('x86_64')
+url="http://www.cmake.org/"
+license=('custom')
+conflicts=('cmake' 'cmake-git')
+provides=('cmake' 'cmake-git')
+depends=('curl' 'libarchive' 'jsoncpp' 'libjsoncpp.so' 'libuv' 'rhash' 'cppdap')
+makedepends=('python-sphinx' 'emacs' 'nlohmann-json' 'git')
+source=(
+        'git+https://gitlab.kitware.com/cmake/cmake.git'
+        'cmake-cppflags.patch'
+)
+md5sums=(
+         'SKIP'
+         'd7316e540d07e0a7ebce75951a7b2697'
+)
+
+pkgver() {
+    cd "$srcdir/cmake"
+    git describe --always --tags --long | sed -e 's|^v||' -e 's|-|.|g'
+}
+
+prepare() {
+    cd "$srcdir/cmake"
+    patch -p1 -i ../cmake-cppflags.patch # Honor CPPFLAGS https://gitlab.kitware.com/cmake/cmake/issues/12928
+}
+
+build() {
+  cd "$srcdir/cmake"
+
+  # --- MISAKA GOD MODE INJECTION ---
+  msg2 "Injecting God Mode Compiler and Flags..."
+  export CC="/opt/gcc-git-god/bin/gcc"
+  export CXX="/opt/gcc-git-god/bin/g++"
+  
+  export GOD_FLAGS="-O3 -march=native -flto=auto -fgraphite-identity -floop-nest-optimize -pipe -fno-semantic-interposition"
+  export GOD_LDFLAGS="-L/opt/gcc-git-god/lib64 -Wl,-rpath,/opt/gcc-git-god/lib64 -flto=auto -Wl,--emit-relocs"
+
+  export CFLAGS="$GOD_FLAGS"
+  export CXXFLAGS="$GOD_FLAGS"
+  export LDFLAGS="$GOD_LDFLAGS"
+  export LD_LIBRARY_PATH="/opt/gcc-git-god/lib64:$LD_LIBRARY_PATH"
+
+  msg2 "Bootstrapping God Mode CLI (No Qt, No Compromise)..."
+  ./bootstrap --prefix=/usr \
+    --mandir=/share/man \
+    --docdir=/share/doc/cmake \
+    --datadir=/share/cmake \
+    --sphinx-man \
+    --sphinx-html \
+    --no-system-libs \
+    --parallel=$(/usr/bin/getconf _NPROCESSORS_ONLN) -- \
+    -DBUILD_QtDialog=OFF \
+    -DCMAKE_USE_OPENSSL=ON
+  
+  msg2 "Main build starting..."
+  make
+}
+
+package() {
+  cd "$srcdir/cmake"
+  make DESTDIR="${pkgdir}" install
+
+  # --- MISAKA GOD MODE INJECTION: BOLT POST-INSTALL ---
+  export BOLT_BIN="/mnt/data/misaka_workspace/toolchains/android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-bolt"
+  if [ -f "$BOLT_BIN" ]; then
+    msg2 "Initiating BOLT Post-Link Optimization on installed binaries..."
+    
+    # 1. 采样：使用刚刚编译好的二进制进行 Profile
+    mkdir -p bolt_profile_run && cd bolt_profile_run
+    LD_LIBRARY_PATH="/opt/gcc-git-god/lib64" perf record -e cycles:u -j any,u -- ../bin/cmake .. -DCMAKE_BUILD_TYPE=Release > /dev/null 2>&1 || true
+    cd ..
+
+    export PERF2BOLT="${BOLT_BIN%llvm-bolt}perf2bolt"
+    if [ -f "$PERF2BOLT" ]; then
+      msg2 "Applying BOLT to cmake..."
+      "$PERF2BOLT" ./bin/cmake -p bolt_profile_run/perf.data -o cmake.fdata
+      "$BOLT_BIN" ./bin/cmake -o ./bin/cmake.bolt -data cmake.fdata -reorder-blocks=ext-tsp -reorder-functions=cdsort -split-functions -split-all-cold -split-eh -dyno-stats
+      cp ./bin/cmake.bolt "$pkgdir"/usr/bin/cmake
+      
+      msg2 "Applying BOLT to ccmake..."
+      "$BOLT_BIN" ./bin/ccmake -o ./bin/ccmake.bolt -data cmake.fdata -reorder-blocks=ext-tsp -reorder-functions=cdsort -split-functions -split-all-cold -split-eh
+      cp ./bin/ccmake.bolt "$pkgdir"/usr/bin/ccmake
+    fi
+  fi
+  # --- END BOLT ---
+
+  rm -rf "$pkgdir"/usr/share/doc/cmake/html/_sources
+  emacs -batch -f batch-byte-compile "${pkgdir}"/usr/share/emacs/site-lisp/cmake-mode.el
+  install -Dm644 LICENSE.rst -t "${pkgdir}"/usr/share/licenses/$pkgname
+}
