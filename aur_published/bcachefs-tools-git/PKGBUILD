@@ -1,0 +1,127 @@
+# Maintainer: Kyle De'Vir (QuartzDragon) <kyle.devir.mykolab.com>
+# Contributor: neycrol <330578697@qq.com>
+
+pkgname=bcachefs-tools-git
+_pkgname=bcachefs-tools
+pkgver=r2258.gc1a0cc6f
+pkgrel=1
+pkgdesc="Bcachefs userspace tools (Git version) with FUSE support enabled"
+arch=('x86_64')
+url="https://bcachefs.org/"
+license=('GPL-2.0-only')
+provides=("$_pkgname")
+conflicts=("$_pkgname")
+
+depends=(
+    'glibc'
+    'libaio'
+    'util-linux-libs'
+    'keyutils'
+    'libsodium'
+    'liburcu'
+    'zlib'
+    'zstd'
+    'lz4'
+    'systemd-libs'
+    'fuse3'
+)
+makedepends=(
+    'git'
+    'rust'
+    'cargo'
+    'clang'
+    'llvm'
+    'pkgconf'
+)
+
+source=("git+https://github.com/koverstreet/bcachefs-tools.git")
+sha256sums=('SKIP')
+
+# Disable LTO to prevent issues with Rust's ThinLTO
+options=('!lto' '!debug')
+
+pkgver() {
+    cd "$_pkgname"
+    printf "r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+    cd "$_pkgname"
+    # Reset any previous patches to ensure a clean state
+    git reset --hard
+    
+    export RUSTUP_TOOLCHAIN=stable
+    cargo fetch --locked --target "$CARCH-unknown-linux-gnu"
+
+    # --- FIX: Header inclusion order (Robust) ---
+    # Move asm/types.h to the top to satisfy __u64 dependency in openat2.h (via fcntl.h)
+    msg2 "Patching include/linux/types.h inclusion order..."
+    
+    # 1. Insert the block at the top (after #define _TOOLS_LINUX_TYPES_H_)
+    sed -i '/#define _TOOLS_LINUX_TYPES_H_/a \
+\
+#ifndef __SANE_USERSPACE_TYPES__\
+#define __SANE_USERSPACE_TYPES__        /* For PPC64, to get LL64 types */\
+#endif\
+#include <asm/types.h>' include/linux/types.h
+
+    # 2. Remove the original block (lines 13-16 in upstream)
+    # We match the specific context to be safe
+    sed -i '/#include <linux\/posix_types.h>/,+5 { /__SANE_USERSPACE_TYPES__/d; /#define __SANE_USERSPACE_TYPES__/d; /#endif/d; /#include <asm\/types.h>/d; }' include/linux/types.h
+}
+
+build() {
+    cd "$_pkgname"
+
+    # Use system CFLAGS/LDFLAGS for Rust
+    # Also strip build paths to avoid packaging warnings and reproducible build issues
+    export RUSTFLAGS="-C link-arg=$LDFLAGS --remap-path-prefix=$srcdir/=/"
+    export CFLAGS="$CFLAGS -fdebug-prefix-map=$srcdir=/="
+
+    make \
+        BCACHEFS_FUSE=1 \
+        PREFIX=/usr \
+        ROOT_SBINDIR=/usr/bin \
+        LIBEXECDIR=/usr/lib \
+        INITRAMFS_DIR=/usr/lib/initcpio \
+        EXTRA_CFLAGS="-include linux/types.h" \
+        all
+    
+    # Generate shell completions using the built binary
+    local _bin="./target/release/bcachefs"
+    if [ -x "$_bin" ]; then
+        msg2 "Generating shell completions..."
+        "$_bin" completions bash > bcachefs.bash
+        "$_bin" completions zsh  > _bcachefs
+        "$_bin" completions fish > bcachefs.fish
+    fi
+}
+
+package() {
+    cd "$_pkgname"
+
+    make \
+        BCACHEFS_FUSE=1 \
+        PREFIX=/usr \
+        ROOT_SBINDIR=/usr/bin \
+        LIBEXECDIR=/usr/lib \
+        INITRAMFS_DIR=/usr/lib/initcpio \
+        DESTDIR="$pkgdir" \
+        install
+
+    # REMOVE DKMS SOURCE INSTALLED BY MAKEFILE
+    # This package provides userspace tools only. The kernel module should be 
+    # managed by 'bcachefs-kernel-dkms-git' or official packages to avoid
+    # version mismatch and stale drivers.
+    rm -rf "$pkgdir/usr/src"
+
+    # Install License
+    install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+    # Install Shell Completions
+    if [ -f bcachefs.bash ]; then
+        install -Dm644 bcachefs.bash "$pkgdir/usr/share/bash-completion/completions/bcachefs"
+        install -Dm644 _bcachefs      "$pkgdir/usr/share/zsh/site-functions/_bcachefs"
+        install -Dm644 bcachefs.fish  "$pkgdir/usr/share/fish/vendor_completions.d/bcachefs.fish"
+    fi
+}

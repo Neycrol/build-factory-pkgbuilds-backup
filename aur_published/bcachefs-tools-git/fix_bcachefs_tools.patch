@@ -1,0 +1,166 @@
+--- PKGBUILD.orig	2025-12-10 00:56:24.149872721 +0800
++++ PKGBUILD	2025-12-10 01:11:42.141421971 +0800
+@@ -1,89 +1,105 @@
+ # Maintainer: Kyle De'Vir (QuartzDragon) <kyle.devir.mykolab.com>
++# Contributor: neycrol <330578697@qq.com>
+ 
+ pkgname=bcachefs-tools-git
+-pkgver=v1.25.3.r56.gda8f1d0
++_pkgname=bcachefs-tools
++pkgver=0.r0.g0000000
+ pkgrel=1
+-pkgdesc="BCacheFS filesystem utilities (Git)"
++pkgdesc="Bcachefs userspace tools (Git version) with FUSE support enabled"
+ arch=('x86_64')
+-url="https://github.com/koverstreet/bcachefs-tools"
++url="https://bcachefs.org/"
+ license=('GPL-2.0-only')
++provides=("$_pkgname")
++conflicts=("$_pkgname")
+ 
+-provides=(bcachefs-tools)
+-conflicts=(bcachefs-tools)
+ depends=(
+-  git
+-  bash
+-  gcc-libs
+-  libaio.so libaio
+-  libblkid.so libuuid.so util-linux-libs
+-  libkeyutils.so keyutils
+-  libsodium.so libsodium
+-  liburcu
+-  libz.so zlib
+-  libzstd.so zstd
+-  lz4
+-  libudev.so systemd-libs
+-  udev
++    'glibc'
++    'libaio'
++    'util-linux-libs'
++    'keyutils'
++    'libsodium'
++    'liburcu'
++    'zlib'
++    'zstd'
++    'lz4'
++    'systemd-libs'
++    'fuse3'
+ )
+ makedepends=(
+-  git
+-  cargo
+-  clang
+-  llvm
+-  pkgconf
+-  valgrind
++    'git'
++    'rust'
++    'cargo'
++    'clang'
++    'llvm'
++    'pkgconf'
+ )
+ 
+-_reponame="bcachefs-tools"
+-_repo_url="https://github.com/koverstreet/$_reponame"
++source=("git+https://github.com/koverstreet/bcachefs-tools.git")
++sha256sums=('SKIP')
+ 
+-options=('!lto' '!strip')
+-source=("git+$_repo_url")
+-b2sums=('SKIP')
++# Disable LTO to prevent issues with Rust's ThinLTO
++options=('!lto')
+ 
+ pkgver() {
+-    cd "$srcdir/$_reponame"
+-    git describe --long --abbrev=7 | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
++    cd "$_pkgname"
++    printf "r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
++}
++
++prepare() {
++    cd "$_pkgname"
++    export RUSTUP_TOOLCHAIN=stable
++    cargo fetch --locked --target "$CARCH-unknown-linux-gnu"
+ }
+ 
+ build() {
+-    cd "$srcdir/$_reponame"
++    cd "$_pkgname"
+ 
+-    # this uses malloc_usable_size, which is incompatible with fortification level 3
+-    export CFLAGS="${CFLAGS/_FORTIFY_SOURCE=3/_FORTIFY_SOURCE=2}"
+-    export CXXFLAGS="${CXXFLAGS/_FORTIFY_SOURCE=3/_FORTIFY_SOURCE=2}"
++    # Use system CFLAGS/LDFLAGS for Rust
++    export RUSTFLAGS="-C link-arg=$LDFLAGS"
+ 
+     make \
++        BCACHEFS_FUSE=1 \
++        PREFIX=/usr \
++        ROOT_SBINDIR=/usr/bin \
+         LIBEXECDIR=/usr/lib \
+-        DESTDIR="${pkgdir}" \
+-        ROOT_SBINDIR="/usr/bin" \
+-        INITRAMFS_DIR="/usr/lib/initcpio/"
++        INITRAMFS_DIR=/usr/lib/initcpio \
++        all
++    
++    # Generate shell completions using the built binary
++    local _bin="./target/release/bcachefs"
++    if [ -x "$_bin" ]; then
++        msg2 "Generating shell completions..."
++        "$_bin" completions bash > bcachefs.bash
++        "$_bin" completions zsh  > _bcachefs
++        "$_bin" completions fish > bcachefs.fish
++    fi
+ }
+ 
+ package() {
+-    cd "$srcdir/$_reponame"
+-
+-    # this uses malloc_usable_size, which is incompatible with fortification level 3
+-    export CFLAGS="${CFLAGS/_FORTIFY_SOURCE=3/_FORTIFY_SOURCE=2}"
+-    export CXXFLAGS="${CXXFLAGS/_FORTIFY_SOURCE=3/_FORTIFY_SOURCE=2}"
++    cd "$_pkgname"
+ 
+     make \
+-        PREFIX="/usr" \
++        BCACHEFS_FUSE=1 \
++        PREFIX=/usr \
++        ROOT_SBINDIR=/usr/bin \
+         LIBEXECDIR=/usr/lib \
+-        DESTDIR="${pkgdir}" \
+-        ROOT_SBINDIR="/usr/bin" \
+-        INITRAMFS_DIR="/usr/lib/initcpio/" \
++        INITRAMFS_DIR=/usr/lib/initcpio \
++        DESTDIR="$pkgdir" \
+         install
+ 
+-    # replace incompatible initcpio hooks
+-    rm -rf "${pkgdir}"/usr/lib/initcpio/*
+-    install -dm755 "${pkgdir}"/usr/lib/initcpio/{hooks,install}
+-    install -Dm644 arch/etc/initcpio/hooks/bcachefs "${pkgdir}"/usr/lib/initcpio/hooks/
+-    install -Dm644 arch/etc/initcpio/install/bcachefs "${pkgdir}"/usr/lib/initcpio/install/
+-
+-    # package completions
+-    install -dm755 "${pkgdir}"/usr/share/{bash-completion/completions,fish/vendor_completions.d,zsh/site-functions}
+-    "${pkgdir}"/usr/bin/bcachefs completions bash > "${pkgdir}"/usr/share/bash-completion/completions/bcachefs
+-    "${pkgdir}"/usr/bin/bcachefs completions fish > "${pkgdir}"/usr/share/fish/vendor_completions.d/bcachefs.fish
+-    "${pkgdir}"/usr/bin/bcachefs completions zsh > "${pkgdir}"/usr/share/zsh/site-functions/_bcachefs
++    # REMOVE DKMS SOURCE INSTALLED BY MAKEFILE
++    # This package provides userspace tools only. The kernel module should be 
++    # managed by 'bcachefs-kernel-dkms-git' or official packages to avoid
++    # version mismatch and stale drivers.
++    rm -rf "$pkgdir/usr/src"
++
++    # Install License
++    install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
++
++    # Install Shell Completions
++    if [ -f bcachefs.bash ]; then
++        install -Dm644 bcachefs.bash "$pkgdir/usr/share/bash-completion/completions/bcachefs"
++        install -Dm644 _bcachefs      "$pkgdir/usr/share/zsh/site-functions/_bcachefs"
++        install -Dm644 bcachefs.fish  "$pkgdir/usr/share/fish/vendor_completions.d/bcachefs.fish"
++    fi
+ }
