@@ -1,0 +1,226 @@
+# Maintainer: Misaka <god-mode-build-factory>
+# Contributor: Danil Nazarkin <aur.danicatgames@pm.me>
+
+pkgname=scrcpy-git-god
+_pkgname=scrcpy
+pkgver=3.3.4_r2889.gdb2f72a5
+pkgrel=1
+pkgdesc='Display and control your Android device (God Mode: GCC 16 + O3 + Graphite)'
+arch=('x86_64')
+url='https://github.com/Genymobile/scrcpy'
+license=(Apache-2.0)
+depends=(android-tools ffmpeg sdl2 glibc libusb hicolor-icon-theme)
+makedepends=(git meson ninja)
+conflicts=(${_pkgname} ${_pkgname}-git)
+provides=(${_pkgname} ${_pkgname}-git)
+source=("git+https://github.com/Genymobile/${_pkgname}.git#branch=dev")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd ${_pkgname}
+  _ver="$(git describe | sed 's/^v//;s/-.*//')"
+  echo "${_ver}_r$(git rev-list --count HEAD).g$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+  cd ${_pkgname}
+  # Download prebuilt server (Java part, runs on phone)
+  _url=$(grep '^PREBUILT_SERVER_URL=' "install_release.sh" | cut -d= -f2)
+  _sha256=$(grep '^PREBUILT_SERVER_SHA256=' "install_release.sh" | cut -d= -f2)
+  _file="${_url##*/}"
+
+  msg2 "Downloading prebuilt server: $_file"
+  if [ ! -f "../$_file" ]; then
+    curl -L -o "../$_file" "$_url"
+  fi
+
+  echo "$_sha256 ../$_file" | sha256sum --check || {
+    echo "Error: server checksum failed"
+    exit 1
+  }
+}
+
+build() {
+  # --- GOD MODE INJECTION (GCC 16) ---
+  msg2 "Injecting God Mode Compiler Stack (GCC 16)..."
+  export CC="/opt/gcc-git-god/bin/gcc"
+  export CXX="/opt/gcc-git-god/bin/g++"
+  export AR="/opt/gcc-git-god/bin/gcc-ar"
+  export NM="/opt/gcc-git-god/bin/gcc-nm"
+  export RANLIB="/opt/gcc-git-god/bin/gcc-ranlib"
+
+  export CFLAGS="-O3 -march=native -flto=auto -fgraphite-identity -floop-nest-optimize -pipe"
+  export CXXFLAGS="$CFLAGS"
+  # Must have --emit-relocs for BOLT!
+  export LDFLAGS="-L/opt/gcc-git-god/lib64 -Wl,-rpath,/opt/gcc-git-god/lib64 -flto=auto -Wl,--allow-shlib-undefined -Wl,--emit-relocs"
+  # --- END INJECTION ---
+
+  rm -rf build
+  
+  # Extract server filename again for build
+  _server_url=$(grep '^PREBUILT_SERVER_URL=' "${_pkgname}/install_release.sh" | cut -d= -f2)
+  _server_file="${_server_url##*/}"
+
+  meson setup build ${_pkgname} \
+    --prefix=/usr \
+    --libdir=lib \
+    --libexecdir=lib \
+    --bindir=bin \
+    --sbindir=bin \
+    --buildtype=release \
+    -D b_lto=true \
+    -D b_ndebug=true \
+    -D prebuilt_server="../$_server_file"
+
+  ninja -C build
+}
+
+package() {
+
+  DESTDIR="$pkgdir" ninja -C build install
+
+  install -Dm644 ${_pkgname}/LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
+
+
+
+  # --- BOLT CONFIGURATION ---
+
+  BOLT_BIN="/mnt/data/misaka_workspace/toolchains/android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-bolt"
+
+  # --- END BOLT CONFIGURATION ---
+
+
+
+  # --- START BOLT OPTIMIZATION ---
+
+  if [ -f "$BOLT_BIN" ]; then
+
+    msg2 "Initiating BOLT Post-Link Optimization on scrcpy..."
+
+    
+
+    mkdir -p bolt_profile_run
+
+    cd bolt_profile_run
+
+    
+
+    # Target binary (scrcpy is a C binary, usually directly in /usr/bin)
+
+    TARGET_BIN="$pkgdir/usr/bin/scrcpy"
+
+    
+
+    # We need to run it. Copy it to a temp location to run? 
+
+    # Or run it from pkgdir but we need libraries.
+
+    # scrcpy usually links dynamically.
+
+    
+
+    msg2 "Sampling scrcpy performance (Profiling)..."
+
+    
+
+    export LD_LIBRARY_PATH="/opt/gcc-git-god/lib64:$LD_LIBRARY_PATH"
+
+    
+
+    # Workload: Just version check + fail to find device
+
+    # We use xvfb to satisfy SDL
+
+    local PROFILE_CMD="timeout 2s perf record -e cycles:u -j any,u -- $TARGET_BIN --version"
+
+    
+
+    if command -v xvfb-run &> /dev/null; then
+
+        msg2 "Using xvfb-run for headless profiling..."
+
+        # Try to run it. It will print version and exit.
+
+        # Then try to run without args to trigger device search code path
+
+        xvfb-run -a $PROFILE_CMD || true
+
+        # Second run to capture more paths (device search failure)
+
+        # timeout 1s because it will hang waiting for device
+
+        timeout 1s xvfb-run -a perf record -e cycles:u -j any,u --append -- "$TARGET_BIN" || true
+
+    else
+
+        msg2 "xvfb-run not found, trying headless..."
+
+        $PROFILE_CMD || true
+
+    fi
+
+    
+
+    if [ ! -s perf.data ]; then
+
+        warning "No profile data collected! BOLT skipped."
+
+        return 0
+
+    fi
+
+
+
+    cd ..
+
+    export PERF2BOLT="${BOLT_BIN%llvm-bolt}perf2bolt"
+
+    
+
+    if [ -f "$PERF2BOLT" ]; then
+
+      msg2 "Applying BOLT to scrcpy..."
+
+      
+
+      "$PERF2BOLT" "$TARGET_BIN" -p bolt_profile_run/perf.data -o scrcpy.fdata
+
+      
+
+      if [ -s scrcpy.fdata ]; then
+
+          "$BOLT_BIN" "$TARGET_BIN" -o ./scrcpy.bolt -data scrcpy.fdata \
+
+            -reorder-blocks=ext-tsp \
+
+            -reorder-functions=cdsort \
+
+            -split-functions \
+
+            -split-all-cold \
+
+            -split-eh \
+
+            -dyno-stats
+
+            
+
+          # Overwrite
+
+          install -m755 ./scrcpy.bolt "$TARGET_BIN"
+
+          msg2 "BOLT optimization complete. God Mode Scrcpy is ready."
+
+      else
+
+          warning "perf2bolt output empty. Optimization skipped."
+
+      fi
+
+    fi
+
+  fi
+
+  # --- END BOLT OPTIMIZATION ---
+
+}
