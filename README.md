@@ -16,3 +16,4 @@ How to use
 
 Notes
 - bcachefs-tools-git includes FUSE enable patch and DKMS cleanup (tools-only).
+- Some src/PrismLauncher files were uploaded earlier and are redundant (PKGBUILD fetches them). Remove them if you want this repo to be tools/patches only.
