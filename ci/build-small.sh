@@ -12,11 +12,11 @@ mkdir -p "$BINREPO_DIR/repo" "$BINREPO_DIR/srcdest"
 export PKGDEST="$BINREPO_DIR/repo"
 export SRCDEST="${SRCDEST:-$BINREPO_DIR/srcdest}"
 
-if [[ -n "${GITFLAGS:-}" ]]; then
-  export GITFLAGS="${GITFLAGS} --progress"
-else
-  export GITFLAGS="--progress"
-fi
+MAKEPKG_CONF="${BINREPO_DIR}/makepkg-ci.conf"
+cat > "$MAKEPKG_CONF" <<'EOF'
+source /etc/makepkg.conf
+GITFLAGS=(--progress)
+EOF
 
 if [[ -f "$CPU_TARGET_FILE" ]]; then
   # shellcheck disable=SC1090
@@ -57,7 +57,7 @@ for pkgdir in "${packages[@]}"; do
   fi
 
   pushd "$ROOT_DIR/$pkgdir" >/dev/null
-  pkgpaths=$(makepkg --packagelist --nobuild --skippgpcheck)
+  pkgpaths=$(MAKEPKG_CONF="$MAKEPKG_CONF" makepkg --packagelist --nobuild --skippgpcheck)
 
   if [[ -z "$pkgpaths" ]]; then
     echo "Failed to compute package list."
@@ -89,7 +89,7 @@ for pkgdir in "${packages[@]}"; do
       PKGBUILD
   fi
 
-  makepkg -sC --noconfirm --skippgpcheck
+  MAKEPKG_CONF="$MAKEPKG_CONF" makepkg -sC --noconfirm --skippgpcheck
   popd >/dev/null
   echo "::endgroup::"
 
