@@ -1,0 +1,67 @@
+# Maintainer: neycrol <330578697@qq.com>
+pkgname=sing-box-master-git
+_pkgname=sing-box
+pkgver=1.12.12.r55.gb2316b5
+pkgrel=1
+pkgdesc="Sing-box (Git) with AVX2 opt, CLI wrapper, auto subconverter & Fish completion"
+arch=('x86_64')
+url="https://sing-box.sagernet.org/"
+license=('GPL-3.0-only')
+groups=('sing-box-suite') # 记得加上组名
+
+depends=('glibc' 'jq' 'subconverter' 'fzf') # 加上 fzf 依赖
+makedepends=('git' 'go')
+provides=('sing-box')
+conflicts=('sing-box' 'sing-box-bin' 'sing-box-git')
+backup=('etc/sing-box/config_template.json')
+
+source=(
+    "git+https://github.com/SagerNet/sing-box.git"
+    "sing-box-wrapper.sh"
+    "config_template.json"
+    "sing-box.service"
+    "sing-box.fish" # 【新增】源文件
+)
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+options=('!strip' '!debug')
+
+pkgver() {
+    cd "$_pkgname"
+    git describe --long --tags --abbrev=7 | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+    cd "$_pkgname"
+    export CGO_ENABLED=1
+    export GOAMD64=v3
+    
+    local _tags=$(sed -n 's/^TAGS[[:space:]]*?=[[:space:]]*//p' Makefile)
+    local _ldflags="-s -w -X 'github.com/sagernet/sing-box/constant.Version=${pkgver}' -checklinkname=0"
+
+    msg2 "Building Core with AVX2..."
+    go build -v -trimpath -tags "$_tags" -ldflags "$_ldflags" -o sing-box-core ./cmd/sing-box
+}
+
+package() {
+    # 1. 核心二进制
+    install -Dm755 "$srcdir/$_pkgname/sing-box-core" "$pkgdir/usr/lib/sing-box/sing-box-core"
+
+    # 2. Wrapper 脚本
+    install -Dm755 "$srcdir/sing-box-wrapper.sh" "$pkgdir/usr/bin/sing-box"
+
+    # 3. 配置模板与目录
+    install -dm755 "$pkgdir/etc/sing-box"
+    install -Dm644 "$srcdir/config_template.json" "$pkgdir/etc/sing-box/config_template.json"
+    touch "$pkgdir/etc/sing-box/subscriptions"
+    chmod 600 "$pkgdir/etc/sing-box/subscriptions"
+
+    # 4. Systemd 服务
+    install -Dm644 "$srcdir/sing-box.service" "$pkgdir/usr/lib/systemd/system/sing-box.service"
+    
+    # 5. Fish 补全 【新增】
+    install -Dm644 "$srcdir/sing-box.fish" "$pkgdir/usr/share/fish/vendor_completions.d/sing-box.fish"
+
+    # 6. 文档 License
+    cd "$srcdir/$_pkgname"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

@@ -1,0 +1,47 @@
+# Maintainer: neycrol <your_email@example.com>
+pkgname=plasma-wayland-protocols-git
+pkgver=1.19.0.r9.g57313b8
+pkgrel=1
+pkgdesc="Plasma Specific Protocols for Wayland (Git Master) - The Rosetta Stone for your KWin"
+arch=('any') # XML 文件不分架构
+url="https://invent.kde.org/libraries/plasma-wayland-protocols"
+license=('LGPL')
+depends=('wayland-protocols')
+makedepends=('git' 'extra-cmake-modules' 'cmake' 'ninja')
+provides=('plasma-wayland-protocols')
+conflicts=('plasma-wayland-protocols')
+source=("git+https://invent.kde.org/libraries/plasma-wayland-protocols.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd plasma-wayland-protocols
+  # 自动追踪最新 commit
+  git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  # 🔥【核心修复】🔥
+  # 这是一个纯协议包（只有 XML 和头文件），不产生二进制代码。
+  # 强行上 Native/LTO 会导致 CMake 编译器检查失败（Undefined reference to main）。
+  # 所以，我们要清空所有神级参数，回归平淡。
+  
+  unset CFLAGS
+  unset CXXFLAGS
+  unset LDFLAGS
+  unset KCFLAGS
+  unset KCPPFLAGS
+  
+  # 或者重置为默认安全值
+  export CFLAGS="-g -O2"
+  export CXXFLAGS="-g -O2"
+  
+  # 正常的 CMake 流程
+  cmake -B build -S plasma-wayland-protocols -G Ninja \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_BUILD_TYPE=Release
+  
+  cmake --build build
+}
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+}

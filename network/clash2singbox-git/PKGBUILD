@@ -1,0 +1,43 @@
+# Maintainer: neycrol <private@local>
+pkgname=clash2singbox-git
+groups=('sing-box-suite')
+_pkgname=clash2singbox
+pkgver=r156.d3d4133
+pkgrel=1
+pkgdesc="Convert Clash config to Sing-box config (Go version)"
+arch=('x86_64')
+url="https://github.com/xmdhs/clash2singbox"
+license=('MIT')
+makedepends=('git' 'go')
+provides=('clash2singbox')
+conflicts=('clash2singbox')
+source=("git+https://github.com/xmdhs/clash2singbox.git")
+sha256sums=('SKIP')
+
+pkgver() {
+    cd "$_pkgname"
+    printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD | cut -c1-7)"
+}
+
+prepare() {
+    cd "$_pkgname"
+    # 配置 Go 代理，防止拉取依赖超时
+    export GOPROXY=https://goproxy.cn,direct
+    go mod download
+}
+
+build() {
+    cd "$_pkgname"
+    # 按照上游 build.bat 配置环境变量
+    export CGO_ENABLED=0
+    export GOAMD64=v3
+    
+    # 直接在根目录编译，不指定路径
+    go build -trimpath -ldflags "-s -w" -o clash2singbox
+}
+
+package() {
+    cd "$_pkgname"
+    install -Dm755 clash2singbox "$pkgdir/usr/bin/clash2singbox"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

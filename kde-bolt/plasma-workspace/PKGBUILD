@@ -1,0 +1,89 @@
+# Maintainer: neycrol <your@email.com>
+pkgname=plasma-workspace-git
+pkgver=6.4.90.r374.gcafa3fdc11
+pkgrel=1
+pkgdesc="KDE Plasma Workspace (Git Master) - Native + ThinLTO + O3 Optimized"
+arch=(x86_64)
+url='https://invent.kde.org/plasma/plasma-workspace'
+license=(LGPL)
+# 强依赖我们刚才编译的 libplasma-git
+depends=(
+  # 核心依赖 (我们自己编译的)
+  libplasma-git
+  kwin-git-bolt
+
+  # KDE 基础组件
+  kactivitymanagerd
+  kde-cli-tools
+  kholidays
+  kpipewire
+  kquickcharts
+  kscreenlocker
+  libksysguard
+  milou
+  ocean-sound-theme
+
+  # 音频与媒体
+  phonon-qt6          # <--- 修正这里
+
+  # Plasma 组件
+  plasma-activities
+  plasma-activities-stats
+  prison
+
+  # 系统与 Qt
+  sh
+  systemd
+  xorg-xwayland
+  qt6-base
+  qt6-declarative
+  qt6-5compat
+  qt6-wayland
+  kirigami-addons
+  kuserfeedback
+
+  # 字体与工具
+  noto-fonts
+  iso-codes
+)
+
+# 移除 user-manager，因为它已经不存在了
+# 冲突列表：这会替换掉系统的标准桌面
+# 声明：我提供了 X11 和 Wayland 的会话文件
+provides=(plasma-workspace plasma-x11-session plasma-wayland-session)
+
+# 声明：我和官方的拆分包冲突，请把它们删了
+conflicts=(plasma-workspace plasma-x11-session plasma-wayland-session)
+source=("git+https://invent.kde.org/plasma/plasma-workspace.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd plasma-workspace
+  git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  # === 物理极限参数 ===
+  export CC=clang
+  export CXX=clang++
+  export CFLAGS="-march=native -mtune=native -O3 -pipe -fno-plt -fexceptions \
+        -Wp,-D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security \
+        -fstack-clash-protection -fcf-protection \
+        -fno-semantic-interposition -flto=thin"
+  export CXXFLAGS="$CFLAGS"
+  export LDFLAGS="-fuse-ld=lld -Wl,-O3 -Wl,--as-needed -Wl,--sort-common -flto=thin"
+
+  # === 编译 ===
+  # -DGLIBC_FIX: 有时候 Glibc 升级会导致一些宏定义冲突，通常 Master 代码已经修了
+  cmake -B build -S plasma-workspace -G Ninja \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_TESTING=OFF \
+    -DGLIBC_FIX=ON
+
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+}

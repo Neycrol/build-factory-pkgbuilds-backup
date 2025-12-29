@@ -1,0 +1,123 @@
+# Maintainer: neycrol <330578697@qq.com>
+pkgname=subconverter-optimized-git
+groups=('sing-box-suite')
+_pkgname=subconverter
+pkgver=0.9.0.r721.g6d312fe
+pkgrel=1
+pkgdesc="Utility to convert between various subscription formats (Git version, Native Optimized)"
+arch=('x86_64')
+url="https://github.com/tindy2013/subconverter"
+license=('GPL3')
+depends=('curl' 'yaml-cpp' 'pcre2' 'rapidjson' 'libevent' 'jemalloc')
+makedepends=('git' 'cmake' 'ninja' 'gcc')
+provides=('subconverter' 'subconverter-bin')
+conflicts=('subconverter' 'subconverter-bin' 'subconverter-git')
+source=(
+    "git+https://github.com/tindy2013/subconverter.git"
+    "git+https://github.com/bellard/quickjs.git"
+    "git+https://github.com/ftk/quickjspp.git"
+    "git+https://github.com/PerMalmberg/libcron.git"
+    "git+https://github.com/HowardHinnant/date.git"
+    "git+https://github.com/ToruNiina/toml11.git"
+    "subconverter.service"
+)
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+# 【关键】不 strip，方便调试；关闭调试包分离
+options=('!strip' '!debug')
+
+pkgver() {
+    cd "$_pkgname"
+    printf "0.9.0.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+    cd "$_pkgname"
+    msg2 "Assembling dependencies..."
+    mkdir -p third_party
+    
+    # === QuickJS ===
+    rm -rf third_party/quickjs
+    cp -r "$srcdir/quickjs" "third_party/quickjs"
+    cp "$srcdir/quickjspp/quickjspp.hpp" "third_party/quickjs/"
+    ln -sf . third_party/quickjs/quickjs
+    sed -i 's|#include "quickjs/quickjs.h"|#include "quickjs.h"|' third_party/quickjs/quickjspp.hpp
+    sed -i 's|JS_SetHostUnhandledPromiseRejectionTracker|JS_SetHostPromiseRejectionTracker|g' third_party/quickjs/quickjspp.hpp
+
+    # === LibCron & Date ===
+    rm -rf third_party/libcron
+    cp -r "$srcdir/libcron" "third_party/libcron"
+    mkdir -p third_party/libcron/libcron/externals
+    rm -rf third_party/libcron/libcron/externals/date
+    ln -sf "$srcdir/date" "third_party/libcron/libcron/externals/date"
+    sed -i '/add_subdirectory(test)/d' third_party/libcron/CMakeLists.txt
+    sed -i '/cron_test/d' third_party/libcron/CMakeLists.txt
+
+    # === Toml11 ===
+    rm -rf third_party/toml11
+    cp -r "$srcdir/toml11" "third_party/toml11"
+
+    # === 【关键修复】删除所有包含非 ASCII 字符的文件 ===
+    msg2 "Removing ALL non-ASCII filenames..."
+    find base -name "*[^[:print:]]*" -delete
+
+    # Patch CMakeLists.txt
+    msg2 "Patching CMakeLists.txt..."
+    sed -i 's|FIND_PACKAGE(toml11 REQUIRED)|# FIND_PACKAGE(toml11 REQUIRED)|' CMakeLists.txt
+    sed -i 's|${TOML11_INCLUDE_DIRS}|${CMAKE_SOURCE_DIR}/third_party/toml11/include|' CMakeLists.txt
+    sed -i 's|FIND_PACKAGE(LibCron REQUIRED)|add_subdirectory(third_party/libcron)|' CMakeLists.txt
+    sed -i 's|${LIBCRON_LIBRARIES}|libcron|' CMakeLists.txt
+    sed -i 's|${LIBCRON_INCLUDE_DIRS}|${CMAKE_SOURCE_DIR}/third_party/libcron/libcron/include;${CMAKE_SOURCE_DIR}/third_party/libcron/libcron/externals/date/include|' CMakeLists.txt
+    sed -i 's|FIND_PACKAGE(QuickJS REQUIRED)|# FIND_PACKAGE(QuickJS REQUIRED)|' CMakeLists.txt
+    sed -i 's|${QUICKJS_LIBRARIES}|${CMAKE_SOURCE_DIR}/third_party/quickjs/libquickjs.a|' CMakeLists.txt
+    sed -i 's|${QUICKJS_INCLUDE_DIRS}|${CMAKE_SOURCE_DIR}/third_party/quickjs|' CMakeLists.txt
+    
+    # 劫持宏定义
+    echo 'add_definitions(-DPROJECT_ROOT="/usr/src/debug")' >> CMakeLists.txt
+    echo 'set(CMAKE_SKIP_BUILD_RPATH ON)' >> CMakeLists.txt
+}
+
+build() {
+    # === 0. 定义终极稳健参数 ===
+    # 1. 彻底关闭 Fortify (-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0)
+    # 2. 依然保留映射以去除警告
+    local map_flag="-ffile-prefix-map=$srcdir=/usr/src/debug"
+    
+    # 构造 CFLAGS: 先取消定义，再定义为 0
+    local safe_cflags="${CFLAGS/-Wp,-D_FORTIFY_SOURCE=?/} -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 $map_flag -march=native -O2 -pipe -fno-plt"
+    export CFLAGS="$safe_cflags"
+    export CXXFLAGS="$safe_cflags"
+
+    # === 1. 编译 QuickJS ===
+    msg2 "Compiling QuickJS..."
+    cd "$srcdir/$_pkgname/third_party/quickjs"
+    make clean >/dev/null 2>&1 || true
+    sed -i "1iCFLAGS+=$map_flag -fPIC" Makefile
+    make libquickjs.a
+    
+    # === 2. 编译 Subconverter ===
+    msg2 "Building Subconverter..."
+    cd "$srcdir/$_pkgname"
+    
+    cmake -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_SKIP_RPATH=ON \
+        -DUSE_JEMALLOC=ON \
+        -Wno-dev
+    
+    sed -i "/^DEFINES /s@$srcdir@/usr/src/debug@g" build/build.ninja
+    
+    cmake --build build
+}
+
+package() {
+    cd "$_pkgname"
+    install -Dm755 build/subconverter "$pkgdir/usr/bin/subconverter"
+    msg2 "Installing default rules..."
+    install -dm755 "$pkgdir/var/lib/subconverter"
+    cp -r base/* "$pkgdir/var/lib/subconverter/"
+    install -Dm644 "$srcdir/subconverter.service" "$pkgdir/usr/lib/systemd/system/subconverter.service"
+    if [ -f "base/pref.example.toml" ]; then
+        install -Dm644 base/pref.example.toml "$pkgdir/var/lib/subconverter/pref.toml"
+    fi
+}
