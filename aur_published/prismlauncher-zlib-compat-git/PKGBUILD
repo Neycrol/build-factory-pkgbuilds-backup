@@ -20,6 +20,7 @@ depends=(
     'cmark'
     'tomlplusplus'
     'quazip-qt6'
+    'qrencode'
     'gamemode'
 )
 makedepends=(
