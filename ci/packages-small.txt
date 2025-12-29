@@ -4,6 +4,7 @@ aur_published/bcachefs-kernel-dkms-git
 aur_published/bcachefs-tools-git
 aur_published/prismlauncher-zlib-compat-git
 cmake-git
+media/ffmpeg-god-git
 game/prismlauncher-fix
 glibc-god
 kde-bolt/konsole-git
