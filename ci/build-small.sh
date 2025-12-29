@@ -234,7 +234,7 @@ for pkgdir in "${packages[@]}"; do
   fi
 
   build_marker=$(mktemp -p "$BINREPO_DIR" build-marker.XXXXXX)
-  makepkg -sC --noconfirm --skippgpcheck
+  makepkg -sC -f --noconfirm --skippgpcheck
 
   mapfile -t built_pkgs < <(find "$PKGDEST" -maxdepth 1 -type f -name '*.pkg.tar.zst' -newer "$build_marker" 2>/dev/null || true)
   rm -f "$build_marker"
