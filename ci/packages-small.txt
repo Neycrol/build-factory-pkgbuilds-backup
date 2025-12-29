@@ -1,5 +1,4 @@
 # Small packages built on GitHub Actions
-android/android-tools-git
 android/scrcpy-git
 aur_published/bcachefs-kernel-dkms-git
 aur_published/bcachefs-tools-git
