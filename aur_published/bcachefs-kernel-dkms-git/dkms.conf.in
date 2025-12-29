@@ -1,0 +1,7 @@
+PACKAGE_NAME="bcachefs"
+PACKAGE_VERSION="@PKGVER@"
+BUILT_MODULE_NAME[0]="bcachefs"
+BUILT_MODULE_LOCATION[0]="fs/bcachefs/"
+DEST_MODULE_LOCATION[0]="/updates/"
+AUTOINSTALL="yes"
+MAKE[0]="make"
