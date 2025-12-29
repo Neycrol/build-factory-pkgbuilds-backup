@@ -233,14 +233,15 @@ for pkgdir in "${packages[@]}"; do
       PKGBUILD
   fi
 
+  build_marker=$(mktemp -p "$BINREPO_DIR" build-marker.XXXXXX)
   makepkg -sC --noconfirm --skippgpcheck
 
-  built_pkgs=()
-  for pkgfile in "${pkgpaths[@]}"; do
-    if [[ -f "$pkgfile" ]]; then
-      built_pkgs+=("$pkgfile")
-    fi
-  done
+  mapfile -t built_pkgs < <(find "$PKGDEST" -maxdepth 1 -type f -name '*.pkg.tar.zst' -newer "$build_marker" 2>/dev/null || true)
+  rm -f "$build_marker"
+
+  if [[ ${#built_pkgs[@]} -eq 0 ]]; then
+    echo "No new packages detected in PKGDEST for ${pkgdir}"
+  fi
 
   popd >/dev/null
 
