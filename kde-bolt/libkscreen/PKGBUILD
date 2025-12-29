@@ -1,0 +1,53 @@
+# Maintainer: neycrol <your@email.com>
+pkgname=libkscreen-git
+pkgver=6.4.90.r21.ga2bc7fe1
+pkgrel=1
+pkgdesc="KDE Screen Management Library (Git Master) - Native + ThinLTO + O3 Optimized"
+arch=(x86_64)
+url='https://invent.kde.org/plasma/libkscreen'
+license=(LGPL)
+depends=(
+  qt6-base
+  qt6-wayland
+  wayland
+  # 关键依赖：必须使用我们之前编译的最新协议
+  plasma-wayland-protocols-git
+)
+makedepends=(git cmake ninja clang lld extra-cmake-modules wayland-protocols)
+provides=(libkscreen)
+conflicts=(libkscreen)
+source=("git+https://invent.kde.org/plasma/libkscreen.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd libkscreen
+  git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  # === 宇宙级参数注入 ===
+  export CC=clang
+  export CXX=clang++
+  # -march=native: i9 特化
+  # -flto=thin: 链接优化
+  export CFLAGS="-march=native -mtune=native -O3 -pipe -fno-plt -fexceptions \
+        -Wp,-D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security \
+        -fstack-clash-protection -fcf-protection \
+        -fno-semantic-interposition -flto=thin"
+  export CXXFLAGS="$CFLAGS"
+  export LDFLAGS="-fuse-ld=lld -Wl,-O3 -Wl,--as-needed -Wl,--sort-common -flto=thin"
+
+  # === 编译 ===
+  # 既然我们已经安装了 plasma-wayland-protocols-git 到系统里
+  # CMake 应该能自动找到它
+  cmake -B build -S libkscreen -G Ninja \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_TESTING=OFF
+  
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+}

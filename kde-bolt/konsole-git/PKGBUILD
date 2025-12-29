@@ -1,0 +1,87 @@
+# Maintainer: Misaka <god-mode-build-factory>
+# Contributor: katt <magunasu.b97@gmail.com>
+
+_pkgname="konsole"
+pkgname="$_pkgname-git-god"
+pkgver=r10032.g23a3dfc96
+pkgrel=1
+pkgdesc='KDE terminal emulator (God Mode: GCC 16 + O3 + Graphite + LTO)'
+url="https://invent.kde.org/utilities/konsole"
+license=('GPL-2.0-or-later' 'LGPL-2.0-or-later')
+arch=('x86_64')
+
+depends=(
+  'knewstuff'
+  'knotifyconfig'
+  'kparts'
+  'kpty'
+  'ktextwidgets'
+  'qt6-multimedia'
+)
+makedepends=(
+  'extra-cmake-modules>=5.240.0'
+  'git'
+  'kdoctools'
+  'ninja'
+)
+optdepends=(
+  'keditbookmarks: to manage bookmarks'
+)
+
+provides=("$_pkgname" "$_pkgname-git" "konsole")
+conflicts=("$_pkgname" "$_pkgname-git" "konsole")
+
+_pkgsrc="$_pkgname"
+source=("$_pkgsrc"::"git+$url.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$_pkgsrc"
+  printf "r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  # --- CLEANUP ---
+  rm -rf build
+
+  # --- GOD MODE INJECTION (GCC 16) ---
+  msg2 "Injecting God Mode Compiler Stack (GCC 16)..."
+  export CC="/opt/gcc-git-god/bin/gcc"
+  export CXX="/opt/gcc-git-god/bin/g++"
+  export AR="/opt/gcc-git-god/bin/gcc-ar"
+  export NM="/opt/gcc-git-god/bin/gcc-nm"
+  export RANLIB="/opt/gcc-git-god/bin/gcc-ranlib"
+
+  # Optimize C/C++
+  export CFLAGS="-O3 -march=native -flto=auto -fgraphite-identity -floop-nest-optimize -pipe"
+  export CXXFLAGS="$CFLAGS"
+  
+  # LDFLAGS: Link to God Libs + Allow System Lib Undefined (Critical for mixed build)
+  export LDFLAGS="-L/opt/gcc-git-god/lib64 -Wl,-rpath,/opt/gcc-git-god/lib64 -flto=auto -Wl,--allow-shlib-undefined"
+  # --- END INJECTION ---
+
+  local _cmake_options=(
+    -B build
+    -S "$_pkgsrc"
+    -G Ninja
+    -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_INSTALL_PREFIX='/usr'
+    -DCMAKE_INSTALL_LIBDIR='lib'
+    -DBUILD_TESTING=OFF
+    -Wno-dev
+    -DCMAKE_CXX_FLAGS="$CXXFLAGS"
+    -DCMAKE_C_FLAGS="$CFLAGS"
+    -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS"
+    -DCMAKE_SHARED_LINKER_FLAGS="$LDFLAGS"
+    -DCMAKE_MODULE_LINKER_FLAGS="$LDFLAGS"
+  )
+
+  cmake "${_cmake_options[@]}"
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+  # BOLT skipped due to profile data sparsity in headless env.
+  # The binary is still heavily optimized by GCC 16 O3 LTO.
+}

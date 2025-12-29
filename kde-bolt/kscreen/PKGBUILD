@@ -1,0 +1,48 @@
+# Maintainer: neycrol <your@email.com>
+pkgname=kscreen-git
+pkgver=6.4.90.r53.g2782acb7
+pkgrel=1
+pkgdesc="KDE Screen Management Software (Git Master) - Native + ThinLTO + O3 Optimized"
+arch=(x86_64)
+url='https://invent.kde.org/plasma/kscreen'
+license=(LGPL)
+# 依赖我们刚才编好的 libkscreen-git
+depends=(
+  libkscreen-git 
+  kdbusaddons ki18n kxmlgui qt6-base qt6-declarative 
+  plasma-wayland-protocols-git
+)
+makedepends=(git cmake ninja clang lld extra-cmake-modules)
+provides=(kscreen)
+conflicts=(kscreen)
+source=("git+https://invent.kde.org/plasma/kscreen.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd kscreen
+  git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  # === 宇宙级参数 ===
+  export CC=clang
+  export CXX=clang++
+  export CFLAGS="-march=native -mtune=native -O3 -pipe -fno-plt -fexceptions \
+        -Wp,-D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security \
+        -fstack-clash-protection -fcf-protection \
+        -fno-semantic-interposition -flto=thin"
+  export CXXFLAGS="$CFLAGS"
+  export LDFLAGS="-fuse-ld=lld -Wl,-O3 -Wl,--as-needed -Wl,--sort-common -flto=thin"
+
+  # === 编译 ===
+  cmake -B build -S kscreen -G Ninja \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_TESTING=OFF
+  
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+}

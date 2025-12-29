@@ -1,0 +1,126 @@
+# Maintainer: neycrol <330578697@qq.com>
+pkgname=kwin-git-bolt
+pkgver=6.4.90.r564.gadf0d882bf
+pkgrel=1
+pkgdesc="KDE Window Manager (Git) - Native + ThinLTO + BOLT Ready (Hermetic Build)"
+arch=(x86_64)
+options=(!strip debug !lto)
+url='https://invent.kde.org/plasma/kwin'
+license=(LGPL)
+depends=(
+  kdecoration
+  breeze
+  glibc
+  gcc-libs
+  qt6-base
+  qt6-declarative
+  qt6-sensors
+  libinput
+  libxkbcommon
+  mesa
+  libdrm
+  lcms2
+  libdisplay-info
+  libxcvt
+  hwdata
+  wayland
+)
+makedepends=(
+  git
+  extra-cmake-modules
+  clang
+  lld
+  llvm
+  cmake
+  ninja
+  python
+  qt6-tools
+  mesa-utils
+  # 新增构建工具
+  meson
+  # 系统里的协议包仅作为保底
+  wayland-protocols
+  plasma-wayland-protocols
+)
+provides=(kwin)
+conflicts=(kwin kwin-git)
+
+source=(
+  "git+https://invent.kde.org/plasma/kwin.git"
+  "git+https://invent.kde.org/libraries/plasma-wayland-protocols.git"
+  "git+https://gitlab.freedesktop.org/wayland/wayland-protocols.git"
+)
+sha256sums=('SKIP' 'SKIP' 'SKIP')
+
+pkgver() {
+  cd kwin
+  git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  mkdir -p "$srcdir/fake-root"
+}
+build() {
+  # === 1. 物理极限参数 ===
+  export CC=clang
+  export CXX=clang++
+  export CFLAGS="-march=native -O3 -pipe -fno-plt -fexceptions -Wp,-D_FORTIFY_SOURCE=2 -flto=thin -fno-semantic-interposition"
+  export CXXFLAGS="$CFLAGS"
+  export LDFLAGS="-fuse-ld=lld -Wl,-O3 -Wl,--as-needed -Wl,--emit-relocs -flto=thin"
+
+  local _fake_root="$srcdir/fake-root"
+
+  # === 2. 编译 Plasma Wayland Protocols (CMake) ===
+  msg2 "🏗️ Building bundled plasma-wayland-protocols..."
+  cmake -B build-plasma-proto -S plasma-wayland-protocols -G Ninja \
+    -DCMAKE_INSTALL_PREFIX="$_fake_root" \
+    -DCMAKE_BUILD_TYPE=Release
+  cmake --build build-plasma-proto
+  cmake --install build-plasma-proto
+
+  # === 3. 编译 Wayland Protocols (Meson) ===
+  msg2 "🏗️ Building bundled wayland-protocols..."
+  rm -rf build-std-proto
+  meson setup build-std-proto wayland-protocols \
+    --prefix="$_fake_root" \
+    --libdir=lib \
+    --buildtype=release
+  meson compile -C build-std-proto
+  meson install -C build-std-proto
+
+  # === 4. 路径注入 (修正版) ===
+
+  # A. 查找 Plasma 协议 Config
+  _plasma_proto_dir=$(find "$_fake_root" -name "PlasmaWaylandProtocolsConfig.cmake" -exec dirname {} \; | head -n 1)
+  if [ -z "$_plasma_proto_dir" ]; then
+    error "Failed to locate Plasma protocols config!"
+    return 1
+  fi
+  msg2 "🔒 Locked Plasma Protocols to: $_plasma_proto_dir"
+
+  # B. 设置 PKG_CONFIG_PATH (修正：只追加，不覆盖)
+  # 这样 KWin 既能找到我们的新协议，也能找到系统的基础 Wayland
+  export PKG_CONFIG_PATH="$_fake_root/lib/pkgconfig:$_fake_root/share/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig"
+
+  # ❌ 删除了 PKG_CONFIG_LIBDIR，这是导致找不到系统库的元凶
+
+  msg2 "🔒 Injecting PKG_CONFIG_PATH..."
+
+  # === 5. 编译 KWin ===
+  msg2 "🏗️ Building KWin..."
+
+  # -DWayland_DATADIR: 显式告诉 CMake 系统 Wayland 协议在哪里 (双保险)
+  cmake -B build -S kwin -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DPlasmaWaylandProtocols_DIR="$_plasma_proto_dir" \
+    -DWayland_DATADIR="/usr/share/wayland" \
+    -DBUILD_TESTING=OFF \
+    -DKWIN_BUILD_DECO_QPA=ON
+
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+}

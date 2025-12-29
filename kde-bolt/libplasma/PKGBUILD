@@ -1,0 +1,54 @@
+# Maintainer: neycrol <your@email.com>
+pkgname=libplasma-git
+pkgver=6.4.90.r56.g10fc5c0aa
+pkgrel=1
+pkgdesc="Plasma library (Git Master) - Native + ThinLTO + O3 Optimized"
+arch=(x86_64)
+url='https://invent.kde.org/plasma/libplasma'
+license=(LGPL)
+# 依赖列表：根据官方 release 调整，涵盖 KF6 全家桶
+depends=(
+  extra-cmake-modules
+  karchive kconfig kguiaddons ki18n kiconthemes kio knotifications
+  kpackage ksvg kwindowsystem kirigami plasma-wayland-protocols
+  glibc gcc-libs qt6-base qt6-declarative qt6-wayland
+  libglvnd wayland
+)
+makedepends=(git cmake ninja clang lld mesa-utils wayland-protocols plasma-wayland-protocols-git)
+provides=(libplasma)
+conflicts=(libplasma)
+source=("git+https://invent.kde.org/plasma/libplasma.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd libplasma
+  git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  # === 宇宙级编译参数注入 ===
+  export CC=clang
+  export CXX=clang++
+  # -march=native: i9 特化
+  # -O3: 激进优化
+  # -flto=thin: 链接时优化 (C++ 收益巨大)
+  # -fno-semantic-interposition: 库函数调用加速
+  export CFLAGS="-march=native -mtune=native -O3 -pipe -fno-plt -fexceptions \
+        -Wp,-D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security \
+        -fstack-clash-protection -fcf-protection \
+        -fno-semantic-interposition -flto=thin"
+  export CXXFLAGS="$CFLAGS"
+  export LDFLAGS="-fuse-ld=lld -Wl,-O3 -Wl,--as-needed -Wl,--sort-common -flto=thin"
+
+  # === 编译 ===
+  cmake -B build -S libplasma -G Ninja \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_TESTING=OFF
+  
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+}
