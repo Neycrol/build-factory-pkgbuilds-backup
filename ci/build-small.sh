@@ -6,6 +6,8 @@ PACKAGES_FILE="${PACKAGES_FILE:-$ROOT_DIR/ci/packages-small.txt}"
 BINREPO_DIR="${BINREPO_DIR:-$ROOT_DIR/.binrepo}"
 REPO_NAME="${REPO_NAME:-buildfactory}"
 CPU_TARGET_FILE="${CPU_TARGET_FILE:-$ROOT_DIR/ci/cpu-target.conf}"
+GOD_GCC_URL="${GOD_GCC_URL:-}"
+GOD_GCC_SHA256="${GOD_GCC_SHA256:-}"
 
 mkdir -p "$BINREPO_DIR/repo" "$BINREPO_DIR/srcdest"
 
@@ -74,6 +76,38 @@ fi
 
 if [[ -z "${MAKEFLAGS:-}" ]]; then
   export MAKEFLAGS="-j$(nproc)"
+fi
+
+if [[ "${CI:-}" == "true" ]]; then
+  if [[ -n "$GOD_GCC_URL" ]]; then
+    if ! command -v curl >/dev/null 2>&1; then
+      sudo pacman -S --noconfirm --needed curl
+    fi
+    tmp_pkg=$(mktemp)
+    if curl -L --fail --retry 3 "$GOD_GCC_URL" -o "$tmp_pkg"; then
+      if [[ -n "$GOD_GCC_SHA256" ]]; then
+        echo "${GOD_GCC_SHA256}  $tmp_pkg" | sha256sum -c -
+      fi
+      if ! sudo pacman -U --noconfirm "$tmp_pkg"; then
+        echo "GCC toolchain install failed; continuing with system gcc."
+      fi
+    else
+      echo "GCC toolchain download failed; continuing with system gcc."
+    fi
+    rm -f "$tmp_pkg"
+  fi
+
+  if /opt/gcc-git-god/bin/gcc --version >/dev/null 2>&1; then
+    export PATH="/opt/gcc-git-god/bin:$PATH"
+  else
+    echo "GCC toolchain missing or unusable; creating system gcc fallback."
+    sudo install -d /opt/gcc-git-god/bin /opt/gcc-git-god/lib64
+    for tool in gcc g++ cc c++ gcc-ar gcc-nm gcc-ranlib; do
+      if [[ -x "/usr/bin/$tool" ]]; then
+        sudo ln -sf "/usr/bin/$tool" "/opt/gcc-git-god/bin/$tool"
+      fi
+    done
+  fi
 fi
 
 mapfile -t packages < <(grep -vE '^[[:space:]]*($|#)' "$PACKAGES_FILE" || true)
