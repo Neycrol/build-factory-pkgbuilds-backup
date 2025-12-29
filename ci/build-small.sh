@@ -9,6 +9,10 @@ CPU_TARGET_FILE="${CPU_TARGET_FILE:-$ROOT_DIR/ci/cpu-target.conf}"
 GOD_GCC_URL="${GOD_GCC_URL:-}"
 GOD_GCC_SHA256="${GOD_GCC_SHA256:-}"
 GOD_GCC_TOKEN="${GOD_GCC_TOKEN:-${GITHUB_TOKEN:-}}"
+PUSH_EACH="${PUSH_EACH:-0}"
+CLEAN_AFTER_BUILD="${CLEAN_AFTER_BUILD:-0}"
+CLEAN_SRCDEST="${CLEAN_SRCDEST:-0}"
+CLEAN_PACMAN="${CLEAN_PACMAN:-0}"
 
 mkdir -p "$BINREPO_DIR/repo" "$BINREPO_DIR/srcdest"
 
@@ -163,12 +167,29 @@ PY
   fi
 fi
 
+if [[ "$PUSH_EACH" == "1" ]]; then
+  git -C "$BINREPO_DIR" config user.name "github-actions[bot]"
+  git -C "$BINREPO_DIR" config user.email "github-actions[bot]@users.noreply.github.com"
+  if [[ -n "${BINREPO_TOKEN:-}" ]]; then
+    origin_url=$(git -C "$BINREPO_DIR" remote get-url origin)
+    if [[ "$origin_url" == https://github.com/* ]]; then
+      origin_path=${origin_url#https://github.com/}
+      git -C "$BINREPO_DIR" remote set-url origin "https://x-access-token:${BINREPO_TOKEN}@github.com/${origin_path}"
+    fi
+  else
+    echo "BINREPO_TOKEN missing; disabling per-package push."
+    PUSH_EACH=0
+  fi
+fi
+
 mapfile -t packages < <(grep -vE '^[[:space:]]*($|#)' "$PACKAGES_FILE" || true)
 
 if [[ ${#packages[@]} -eq 0 ]]; then
   echo "No packages listed in $PACKAGES_FILE"
   exit 0
 fi
+
+repo_updated=0
 
 for pkgdir in "${packages[@]}"; do
   echo "::group::${pkgdir}"
@@ -180,21 +201,21 @@ for pkgdir in "${packages[@]}"; do
   fi
 
   pushd "$ROOT_DIR/$pkgdir" >/dev/null
-  pkgpaths=$(makepkg --packagelist --nobuild --skippgpcheck)
+  mapfile -t pkgpaths < <(makepkg --packagelist --nobuild --skippgpcheck)
 
-  if [[ -z "$pkgpaths" ]]; then
+  if [[ ${#pkgpaths[@]} -eq 0 ]]; then
     echo "Failed to compute package list."
     popd >/dev/null
     exit 1
   fi
 
   missing=false
-  while IFS= read -r pkgfile; do
+  for pkgfile in "${pkgpaths[@]}"; do
     if [[ ! -f "$pkgfile" ]]; then
       missing=true
       break
     fi
-  done <<< "$pkgpaths"
+  done
 
   if [[ "$missing" == false ]]; then
     echo "Up-to-date; skipping build."
@@ -213,15 +234,55 @@ for pkgdir in "${packages[@]}"; do
   fi
 
   makepkg -sC --noconfirm --skippgpcheck
+
+  built_pkgs=()
+  for pkgfile in "${pkgpaths[@]}"; do
+    if [[ -f "$pkgfile" ]]; then
+      built_pkgs+=("$pkgfile")
+    fi
+  done
+
   popd >/dev/null
+
+  if [[ ${#built_pkgs[@]} -gt 0 ]]; then
+    repo_files=()
+    for pkgfile in "${built_pkgs[@]}"; do
+      repo_files+=("$(basename "$pkgfile")")
+    done
+    (cd "$BINREPO_DIR/repo" && repo-add -R "${REPO_NAME}.db.tar.gz" "${repo_files[@]}")
+    cp -f "$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.db"
+    cp -f "$BINREPO_DIR/repo/${REPO_NAME}.files.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.files"
+    repo_updated=1
+
+    if [[ "$PUSH_EACH" == "1" ]]; then
+      git -C "$BINREPO_DIR" add repo
+      if ! git -C "$BINREPO_DIR" diff --cached --quiet; then
+        git -C "$BINREPO_DIR" commit -m "Update ${pkgdir} $(date -u +%Y-%m-%d)"
+        git -C "$BINREPO_DIR" push
+      fi
+    fi
+  fi
+
+  if [[ "$CLEAN_AFTER_BUILD" == "1" ]]; then
+    rm -rf "$ROOT_DIR/$pkgdir/pkg" "$ROOT_DIR/$pkgdir/src"
+    if [[ "$CLEAN_SRCDEST" == "1" ]] && [[ -d "$SRCDEST" ]]; then
+      find "$SRCDEST" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+    fi
+    if [[ "$CLEAN_PACMAN" == "1" ]]; then
+      sudo pacman -Scc --noconfirm || true
+    fi
+  fi
+
   echo "::endgroup::"
 
 done
 
-if ls "$BINREPO_DIR/repo"/*.pkg.tar.zst >/dev/null 2>&1; then
-  (cd "$BINREPO_DIR/repo" && repo-add -R "${REPO_NAME}.db.tar.gz" *.pkg.tar.zst)
-  cp -f "$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.db"
-  cp -f "$BINREPO_DIR/repo/${REPO_NAME}.files.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.files"
-else
-  echo "No packages found; skip repo-add."
+if [[ "$repo_updated" -eq 0 ]]; then
+  if ls "$BINREPO_DIR/repo"/*.pkg.tar.zst >/dev/null 2>&1; then
+    (cd "$BINREPO_DIR/repo" && repo-add -R "${REPO_NAME}.db.tar.gz" *.pkg.tar.zst)
+    cp -f "$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.db"
+    cp -f "$BINREPO_DIR/repo/${REPO_NAME}.files.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.files"
+  else
+    echo "No packages found; skip repo-add."
+  fi
 fi
