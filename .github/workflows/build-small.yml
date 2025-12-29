@@ -27,7 +27,7 @@ jobs:
           pacman-key --init
           pacman-key --populate archlinux
           pacman -Syu --noconfirm
-          pacman -S --noconfirm --needed git sudo curl
+          pacman -S --noconfirm --needed git sudo curl python
 
       - name: Create build user
         run: |
