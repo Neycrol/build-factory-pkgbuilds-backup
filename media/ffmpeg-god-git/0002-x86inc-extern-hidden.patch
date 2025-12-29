@@ -1,0 +1,28 @@
+diff --git a/libavutil/x86/x86inc.asm b/libavutil/x86/x86inc.asm
+index 0e80ebed43..7ce1ef01cf 100644
+--- a/libavutil/x86/x86inc.asm
++++ b/libavutil/x86/x86inc.asm
+@@ -875,7 +875,11 @@ BRANCH_INSTR jz, je, jnz, jne, jl, jle, jnl, jnle, jg, jge, jng, jnge, ja, jae,
+ %macro cextern 1
+     %xdefine %1 mangle(private_prefix %+ _ %+ %1)
+     CAT_XDEFINE cglobaled_, %1, 1
++%if FORMAT_ELF
++    extern %1:hidden
++%else
+     extern %1
++%endif
+ %endmacro
+ 
+ ; like cextern, but without the prefix
+@@ -884,7 +888,11 @@ BRANCH_INSTR jz, je, jnz, jne, jl, jle, jnl, jnle, jg, jge, jng, jnge, ja, jae,
+         %xdefine %1 mangle(%1)
+     %endif
+     CAT_XDEFINE cglobaled_, %1, 1
++%if FORMAT_ELF
++    extern %1:hidden
++%else
+     extern %1
++%endif
+ %endmacro
+ 
+ %macro const 1-2+

@@ -1,0 +1,26 @@
+diff --git a/libavcodec/rv40dsp.c b/libavcodec/rv40dsp.c
+index 7370b89e1b..84ea08ca0f 100644
+--- a/libavcodec/rv40dsp.c
++++ b/libavcodec/rv40dsp.c
+@@ -284,7 +284,7 @@ static void avg_rv40_qpel8_mc33_c(uint8_t *dst, const uint8_t *src, ptrdiff_t st
+     avg_pixels8_xy2_8_c(dst, src, stride, 8);
+ }
+ 
+-attribute_visibility_hidden const int ff_rv40_bias[4][4] = {
++attribute_visibility_hidden av_used const int ff_rv40_bias[4][4] = {
+     {  0, 16, 32, 16 },
+     { 32, 28, 32, 28 },
+     {  0, 32, 16, 32 },
+diff --git a/libavcodec/sbrdsp_template.c b/libavcodec/sbrdsp_template.c
+index b5766c6980..3f641e2e0c 100644
+--- a/libavcodec/sbrdsp_template.c
++++ b/libavcodec/sbrdsp_template.c
+@@ -109,7 +109,7 @@ av_cold void AAC_RENAME(ff_sbrdsp_init)(SBRDSPContext *s)
+ }
+ 
+ /* First eight entries repeated at end to simplify SIMD implementations. */
+-const attribute_visibility_hidden DECLARE_ALIGNED(16, INTFLOAT, AAC_RENAME(ff_sbr_noise_table))[][2] = {
++const attribute_visibility_hidden av_used DECLARE_ALIGNED(16, INTFLOAT, AAC_RENAME(ff_sbr_noise_table))[][2] = {
+ {Q31(-0.99948153278296f), Q31(-0.59483417516607f)}, {Q31( 0.97113454393991f), Q31(-0.67528515225647f)},
+ {Q31( 0.14130051758487f), Q31(-0.95090983575689f)}, {Q31(-0.47005496701697f), Q31(-0.37340549728647f)},
+ {Q31( 0.80705063769351f), Q31( 0.29653668284408f)}, {Q31(-0.38981478896926f), Q31( 0.89572605717087f)},
