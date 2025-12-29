@@ -39,9 +39,15 @@ jobs:
           git clone https://github.com/Neycrol/misaka-treasure-chest.git "$BINREPO_DIR"
 
       - name: Build packages
+        env:
+          BINREPO_TOKEN: ${{ secrets.BINREPO_TOKEN }}
+          PUSH_EACH: "1"
+          CLEAN_AFTER_BUILD: "1"
+          CLEAN_SRCDEST: "1"
+          CLEAN_PACMAN: "1"
         run: |
           chown -R builder:builder "$GITHUB_WORKSPACE" "$BINREPO_DIR"
-          sudo -u builder -H env REPO_NAME="$REPO_NAME" BINREPO_DIR="$BINREPO_DIR" PACKAGES_FILE="$PACKAGES_FILE" CPU_TARGET_FILE="$CPU_TARGET_FILE" DEBUG_ENV="$DEBUG_ENV" GOD_GCC_URL="$GOD_GCC_URL" GOD_GCC_TOKEN="$GOD_GCC_TOKEN" CI=true bash ci/build-small.sh
+          sudo -u builder -H env REPO_NAME="$REPO_NAME" BINREPO_DIR="$BINREPO_DIR" PACKAGES_FILE="$PACKAGES_FILE" CPU_TARGET_FILE="$CPU_TARGET_FILE" DEBUG_ENV="$DEBUG_ENV" GOD_GCC_URL="$GOD_GCC_URL" GOD_GCC_TOKEN="$GOD_GCC_TOKEN" BINREPO_TOKEN="$BINREPO_TOKEN" PUSH_EACH="$PUSH_EACH" CLEAN_AFTER_BUILD="$CLEAN_AFTER_BUILD" CLEAN_SRCDEST="$CLEAN_SRCDEST" CLEAN_PACMAN="$CLEAN_PACMAN" CI=true bash ci/build-small.sh
 
       - name: Push updated repo
         env:
