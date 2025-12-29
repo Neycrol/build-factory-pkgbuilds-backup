@@ -17,6 +17,7 @@ jobs:
       CPU_TARGET_FILE: ci/cpu-target.conf
       DEBUG_ENV: "1"
       GOD_GCC_URL: https://github.com/Neycrol/build-factory-pkgbuilds-backup/releases/download/gcc-git-god-16/gcc-git-god-16.0.0.r20251220-1-x86_64.pkg.tar.zst
+      GOD_GCC_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -40,7 +41,7 @@ jobs:
       - name: Build packages
         run: |
           chown -R builder:builder "$GITHUB_WORKSPACE" "$BINREPO_DIR"
-          sudo -u builder -H env REPO_NAME="$REPO_NAME" BINREPO_DIR="$BINREPO_DIR" PACKAGES_FILE="$PACKAGES_FILE" CPU_TARGET_FILE="$CPU_TARGET_FILE" DEBUG_ENV="$DEBUG_ENV" GOD_GCC_URL="$GOD_GCC_URL" CI=true bash ci/build-small.sh
+          sudo -u builder -H env REPO_NAME="$REPO_NAME" BINREPO_DIR="$BINREPO_DIR" PACKAGES_FILE="$PACKAGES_FILE" CPU_TARGET_FILE="$CPU_TARGET_FILE" DEBUG_ENV="$DEBUG_ENV" GOD_GCC_URL="$GOD_GCC_URL" GOD_GCC_TOKEN="$GOD_GCC_TOKEN" CI=true bash ci/build-small.sh
 
       - name: Push updated repo
         env:
