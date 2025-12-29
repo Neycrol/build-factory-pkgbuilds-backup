@@ -1,4 +1,5 @@
 # Heavy builds (do not build on GitHub-hosted runners)
+android/android-tools-git
 browser/ungoogled-chromium
 game/proton-god/proton-tkg
 game/proton-god/wine-tkg-git
