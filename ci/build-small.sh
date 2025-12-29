@@ -8,6 +8,7 @@ REPO_NAME="${REPO_NAME:-buildfactory}"
 CPU_TARGET_FILE="${CPU_TARGET_FILE:-$ROOT_DIR/ci/cpu-target.conf}"
 GOD_GCC_URL="${GOD_GCC_URL:-}"
 GOD_GCC_SHA256="${GOD_GCC_SHA256:-}"
+GOD_GCC_TOKEN="${GOD_GCC_TOKEN:-${GITHUB_TOKEN:-}}"
 
 mkdir -p "$BINREPO_DIR/repo" "$BINREPO_DIR/srcdest"
 
@@ -84,7 +85,11 @@ if [[ "${CI:-}" == "true" ]]; then
       sudo pacman -S --noconfirm --needed curl
     fi
     tmp_pkg=$(mktemp)
-    if curl -L --fail --retry 3 "$GOD_GCC_URL" -o "$tmp_pkg"; then
+    curl_args=(-L --fail --retry 3)
+    if [[ -n "$GOD_GCC_TOKEN" ]]; then
+      curl_args+=(-H "Authorization: Bearer $GOD_GCC_TOKEN")
+    fi
+    if curl "${curl_args[@]}" "$GOD_GCC_URL" -o "$tmp_pkg"; then
       if [[ -n "$GOD_GCC_SHA256" ]]; then
         echo "${GOD_GCC_SHA256}  $tmp_pkg" | sha256sum -c -
       fi
