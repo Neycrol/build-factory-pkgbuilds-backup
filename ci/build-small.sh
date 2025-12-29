@@ -85,11 +85,59 @@ if [[ "${CI:-}" == "true" ]]; then
       sudo pacman -S --noconfirm --needed curl
     fi
     tmp_pkg=$(mktemp)
+    download_ok=0
     curl_args=(-L --fail --retry 3)
     if [[ -n "$GOD_GCC_TOKEN" ]]; then
       curl_args+=(-H "Authorization: Bearer $GOD_GCC_TOKEN")
     fi
     if curl "${curl_args[@]}" "$GOD_GCC_URL" -o "$tmp_pkg"; then
+      download_ok=1
+    else
+      echo "Direct GCC download failed; attempting GitHub API."
+      if [[ -n "$GOD_GCC_TOKEN" ]] && [[ "$GOD_GCC_URL" == https://github.com/*/releases/download/* ]]; then
+        if ! command -v python >/dev/null 2>&1; then
+          sudo pacman -S --noconfirm --needed python
+        fi
+        stripped=${GOD_GCC_URL#https://github.com/}
+        owner=${stripped%%/*}
+        rest=${stripped#*/}
+        repo=${rest%%/*}
+        rest=${rest#*/}
+        rest=${rest#releases/download/}
+        tag=${rest%%/*}
+        asset=${rest#*/}
+        api_url="https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}"
+        asset_url=$(python - "$api_url" "$GOD_GCC_TOKEN" "$asset" <<'PY' || true
+import json
+import sys
+import urllib.request
+
+api_url, token, asset_name = sys.argv[1:4]
+req = urllib.request.Request(api_url)
+req.add_header("Accept", "application/vnd.github+json")
+if token:
+    req.add_header("Authorization", f"Bearer {token}")
+with urllib.request.urlopen(req) as resp:
+    data = json.load(resp)
+for item in data.get("assets", []):
+    if item.get("name") == asset_name:
+        print(item.get("url", ""))
+        break
+PY
+)
+        if [[ -n "$asset_url" ]]; then
+          if curl -L --fail -H "Authorization: Bearer $GOD_GCC_TOKEN" -H "Accept: application/octet-stream" "$asset_url" -o "$tmp_pkg"; then
+            download_ok=1
+          fi
+        else
+          echo "GCC asset not found via API; check tag or asset name."
+        fi
+      else
+        echo "GCC URL not in release-download form or token missing; skipping API fallback."
+      fi
+    fi
+
+    if [[ "$download_ok" == "1" ]]; then
       if [[ -n "$GOD_GCC_SHA256" ]]; then
         echo "${GOD_GCC_SHA256}  $tmp_pkg" | sha256sum -c -
       fi
