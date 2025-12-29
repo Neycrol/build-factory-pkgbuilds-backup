@@ -14,6 +14,7 @@ jobs:
       REPO_NAME: buildfactory
       BINREPO_DIR: /work/binrepo
       PACKAGES_FILE: ci/packages-small.txt
+      CPU_TARGET_FILE: ci/cpu-target.conf
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -37,7 +38,7 @@ jobs:
       - name: Build packages
         run: |
           chown -R builder:builder "$GITHUB_WORKSPACE" "$BINREPO_DIR"
-          sudo -u builder -H env REPO_NAME="$REPO_NAME" BINREPO_DIR="$BINREPO_DIR" PACKAGES_FILE="$PACKAGES_FILE" bash ci/build-small.sh
+          sudo -u builder -H env REPO_NAME="$REPO_NAME" BINREPO_DIR="$BINREPO_DIR" PACKAGES_FILE="$PACKAGES_FILE" CPU_TARGET_FILE="$CPU_TARGET_FILE" bash ci/build-small.sh
 
       - name: Push updated repo
         env:
