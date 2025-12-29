@@ -38,15 +38,7 @@ shift
 
 case "$cmd" in
   clone|fetch)
-    "$REAL_GIT" "$cmd" --progress "$@" &
-    git_pid=$!
-    while kill -0 "$git_pid" 2>/dev/null; do
-      sleep 30
-      if kill -0 "$git_pid" 2>/dev/null; then
-        echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') git $cmd still running..."
-      fi
-    done
-    wait "$git_pid"
+    exec "$REAL_GIT" "$cmd" --progress "$@"
     ;;
   *)
     exec "$REAL_GIT" "$cmd" "$@"
