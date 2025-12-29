@@ -5,11 +5,30 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKAGES_FILE="${PACKAGES_FILE:-$ROOT_DIR/ci/packages-small.txt}"
 BINREPO_DIR="${BINREPO_DIR:-$ROOT_DIR/.binrepo}"
 REPO_NAME="${REPO_NAME:-buildfactory}"
+CPU_TARGET_FILE="${CPU_TARGET_FILE:-$ROOT_DIR/ci/cpu-target.conf}"
 
 mkdir -p "$BINREPO_DIR/repo" "$BINREPO_DIR/srcdest"
 
 export PKGDEST="$BINREPO_DIR/repo"
 export SRCDEST="${SRCDEST:-$BINREPO_DIR/srcdest}"
+
+if [[ -f "$CPU_TARGET_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$CPU_TARGET_FILE"
+fi
+
+CPU_MARCH="${CPU_MARCH:-}"
+CPU_MTUNE="${CPU_MTUNE:-$CPU_MARCH}"
+
+if [[ -n "$CPU_MARCH" ]]; then
+  export CFLAGS="${CFLAGS:-} -march=${CPU_MARCH}"
+  export CXXFLAGS="${CXXFLAGS:-} -march=${CPU_MARCH}"
+  if [[ -n "$CPU_MTUNE" ]]; then
+    export CFLAGS="${CFLAGS} -mtune=${CPU_MTUNE}"
+    export CXXFLAGS="${CXXFLAGS} -mtune=${CPU_MTUNE}"
+  fi
+  export RUSTFLAGS="${RUSTFLAGS:-} -C target-cpu=${CPU_MARCH}"
+fi
 
 if [[ -z "${MAKEFLAGS:-}" ]]; then
   export MAKEFLAGS="-j$(nproc)"
@@ -53,6 +72,15 @@ for pkgdir in "${packages[@]}"; do
     popd >/dev/null
     echo "::endgroup::"
     continue
+  fi
+
+  if [[ -n "$CPU_MARCH" ]]; then
+    sed -i \
+      -e "s/-march=native/-march=${CPU_MARCH}/g" \
+      -e "s/-mtune=native/-mtune=${CPU_MTUNE}/g" \
+      -e "s/-mcpu=native/-mcpu=${CPU_MARCH}/g" \
+      -e "s/target-cpu=native/target-cpu=${CPU_MARCH}/g" \
+      PKGBUILD
   fi
 
   makepkg -sC --noconfirm --skippgpcheck
