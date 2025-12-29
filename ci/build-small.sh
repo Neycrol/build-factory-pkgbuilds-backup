@@ -21,8 +21,37 @@ cat > "$GIT_CONFIG_FILE" <<'EOF'
 EOF
 export MAKEPKG_GIT_CONFIG="$GIT_CONFIG_FILE"
 
+GIT_WRAPPER_DIR="$BINREPO_DIR/git-wrapper"
+mkdir -p "$GIT_WRAPPER_DIR"
+cat > "$GIT_WRAPPER_DIR/git" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+REAL_GIT="/usr/bin/git"
+
+if [[ $# -eq 0 ]]; then
+  exec "$REAL_GIT"
+fi
+
+cmd="$1"
+shift
+
+case "$cmd" in
+  clone|fetch)
+    exec "$REAL_GIT" "$cmd" --progress "$@"
+    ;;
+  *)
+    exec "$REAL_GIT" "$cmd" "$@"
+    ;;
+esac
+EOF
+chmod +x "$GIT_WRAPPER_DIR/git"
+export PATH="$GIT_WRAPPER_DIR:$PATH"
+
 if [[ "${DEBUG_ENV:-0}" == "1" ]]; then
   env | sort | grep -E '^(MAKEPKG|GIT)_' || true
+  command -v git || true
+  git --version || true
 fi
 
 if [[ -f "$CPU_TARGET_FILE" ]]; then
