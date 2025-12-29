@@ -1,0 +1,131 @@
+# Maintainer: neycrol <330578697@qq.com>
+pkgname=fish-git-pgo-bolt
+pkgver=4.2.1.r226.g67d78fb25
+pkgrel=1
+pkgdesc="Fish Shell (Rust) - PGO + Fat LTO + Codegen=1 + BOLT Optimized"
+arch=(x86_64)
+url="https://fishshell.com"
+license=(GPL2)
+depends=(glibc gcc-libs ncurses pcre2)
+makedepends=(git cmake ninja clang lld rust bolt) # 确保装了 llvm-bolt
+provides=(fish)
+conflicts=(fish fish-git)
+source=("git+https://github.com/fish-shell/fish-shell.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd fish-shell
+  git describe --long --tags | sed 's/^//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  # 准备 BOLT 数据目录
+  mkdir -p "$srcdir/bolt_data"
+}
+
+build() {
+  # === 1. 环境准备 (使用系统工具) ===
+  export CC=clang
+  export CXX=clang++
+  # 强制使用 LLD 链接器 (支持 BOLT 所需的重定位)
+  export LDFLAGS="-fuse-ld=lld"
+
+  # === 2. Stage 1: PGO 插桩编译 ===
+  msg2 "🚀 Starting PGO Stage 1: Instrumentation..."
+  rm -rf build-pgo
+
+  # RUSTFLAGS 注入：
+  # -Cprofile-generate: 插桩
+  # -Ctarget-cpu=native: 物理特化
+  export RUSTFLAGS="-Cprofile-generate=$srcdir/pgo_data -Ctarget-cpu=native"
+
+  cmake -B build-pgo -S fish-shell -G Ninja \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DWITH_GETTEXT=OFF
+
+  cmake --build build-pgo
+
+  # === 3. Stage 2: 特训 (PGO Training) ===
+  msg2 "🏋️‍♂️ Training Fish (PGO)..."
+
+  export LLVM_PROFILE_FILE="$srcdir/pgo_data/fish-%p-%m.profraw"
+
+  # 模拟高强度使用
+  echo 'for i in (seq 1 5000); string match -r ".*" "test_$i" >/dev/null; end' > train.fish
+
+  for i in {1..20}; do
+    ./build-pgo/fish --no-config train.fish > /dev/null 2>&1
+    ./build-pgo/fish --no-config -c "complete -C 'git comm'" > /dev/null 2>&1
+    ./build-pgo/fish --no-config -c "exit" > /dev/null 2>&1
+  done
+
+  # === 4. Stage 3: 极限参数编译 (PGO Use + Fat LTO + Codegen=1) ===
+  msg2 "🔥 Starting Stage 3: Extreme Compilation..."
+
+  # 合并 PGO 数据
+  llvm-profdata merge -output="$srcdir/fish.profdata" "$srcdir/pgo_data"
+
+  # 终极 Rust 参数：
+  # -Cprofile-use: 注入 PGO 数据
+  # -Clto=fat: 全局胖 LTO (极致优化)
+  # -Ccodegen-units=1: 单线程代码生成 (极致优化)
+  # -Cpanic=abort: 去除回溯 (极致精简)
+  # -Clink-arg=-Wl,--emit-relocs: 保留重定位信息 (为 BOLT 做准备)
+  export RUSTFLAGS="-Cprofile-use=$srcdir/fish.profdata -Ctarget-cpu=native -Clto=fat -Ccodegen-units=1 -Cpanic=abort -Clink-arg=-Wl,--emit-relocs"
+
+  # 清除旧构建
+  rm -rf build-pgo
+
+  cmake -B build-pgo -S fish-shell -G Ninja \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DWITH_GETTEXT=OFF
+
+  cmake --build build-pgo
+
+  # === 5. Stage 4: BOLT 物理重排 (The Final Touch) ===
+  msg2 "⚡ Starting BOLT Optimization..."
+
+  # 5.1 录制 BOLT 数据
+  # 我们用刚才编好的 fish 再跑一遍训练脚本，这次用 perf 录
+  # 注意：这里需要 sudo 权限，makepkg 环境下可能需要无密码 sudo，或者手动执行
+  # 如果这里报错，可以注释掉 BOLT 部分，只用 PGO+LTO 也很强了
+
+  # 假设你有 sudo 权限 (或者在 fakeroot 外面跑)
+  # 这里为了脚本自动化，我们假设用户环境允许 perf
+
+  # 复制一份出来录制
+  cp build-pgo/fish fish.orig
+
+  # 启动录制 (后台)
+  # -F pid: 只记录 fish 的 PID 没法提前知道，所以我们用 -c (命令) 模式
+  # 录制 20 秒足够了
+  sudo perf record -e cycles:u -j any,u -o "$srcdir/bolt_data/fish.data" -- \
+    ./fish.orig --no-config train.fish > /dev/null 2>&1
+
+  # 5.2 转换与优化
+  # 将 perf 数据转为 BOLT 格式
+  sudo perf2bolt ./fish.orig -p "$srcdir/bolt_data/fish.data" -o "$srcdir/bolt_data/fish.fdata" --ignore-build-id
+
+  # 执行 BOLT
+  # -reorder-blocks=ext-tsp: 核心算法
+  # -reorder-functions=hfsort: 用户态可以开！
+  # -split-functions: 用户态可以开！
+  # -icf=1: 代码折叠
+  sudo llvm-bolt ./fish.orig -o ./fish.bolt \
+    -data "$srcdir/bolt_data/fish.fdata" \
+    -reorder-blocks=ext-tsp \
+    -reorder-functions=hfsort \
+    -split-functions \
+    -split-all-cold \
+    -icf=1 \
+    -dyno-stats
+
+  # 5.3 替换
+  mv ./fish.bolt build-pgo/fish
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build-pgo
+}

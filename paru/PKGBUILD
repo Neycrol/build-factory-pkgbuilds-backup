@@ -1,0 +1,121 @@
+# Maintainer: Morgan <morganamilo@archlinux.org>
+pkgname=paru
+pkgver=2.1.0
+pkgrel=2
+pkgdesc='Feature packed AUR helper (God Mode Build with GCC 16)'
+url='https://github.com/morganamilo/paru'
+source=("$pkgname-$pkgver.tar.gz::https://github.com/Morganamilo/paru/archive/v$pkgver.tar.gz")
+backup=("etc/paru.conf")
+arch=('i686' 'pentium4' 'x86_64' 'arm' 'armv7h' 'armv6h' 'aarch64')
+license=('GPL-3.0-or-later')
+makedepends=('cargo' 'git')
+depends=('git' 'pacman')
+optdepends=('bat: colored pkgbuild printing' 'devtools: build in chroot and downloading pkgbuilds')
+sha256sums=('eea4dbb524db765d5316f540f9ee670c0bf81aae4827b5417eebb4c9b5651727')
+
+prepare() {
+  cd "$pkgname-$pkgver"
+  # Update dependencies to ensure compatibility with libalpm v16
+  cargo update
+  cargo fetch --target "$(rustc -vV | sed -n 's|host: ||p')"
+}
+
+build () {
+  cd "$srcdir/$pkgname-$pkgver"
+
+  # --- GOD MODE INJECTION ---
+  msg2 "Injecting God Mode Compiler Stack..."
+  export CC="/opt/gcc-git-god/bin/gcc"
+  export CXX="/opt/gcc-git-god/bin/g++"
+  export AR="/opt/gcc-git-god/bin/gcc-ar"
+  export NM="/opt/gcc-git-god/bin/gcc-nm"
+  export RANLIB="/opt/gcc-git-god/bin/gcc-ranlib"
+
+  # Optimize C/C++ parts (libalpm bindings etc)
+  export CFLAGS="-O3 -march=native -flto=auto -fgraphite-identity -floop-nest-optimize -pipe"
+  export CXXFLAGS="$CFLAGS"
+  export LDFLAGS="-L/opt/gcc-git-god/lib64 -Wl,-rpath,/opt/gcc-git-god/lib64 -flto=auto -Wl,--emit-relocs"
+
+  # Optimize Rust parts and ensure it finds the God Libs
+  # BOLT requires --emit-relocs to perform function reordering safely
+  export RUSTFLAGS="-C target-cpu=native -C link-arg=-Wl,-rpath,/opt/gcc-git-god/lib64 -C link-arg=-L/opt/gcc-git-god/lib64 -C link-arg=-Wl,--emit-relocs"
+  # --- END INJECTION ---
+
+  # Force enable git feature since we are using pacman-git
+  _features="git,"
+
+  if [[ $CARCH != x86_64 ]]; then
+    export CARGO_PROFILE_RELEASE_LTO=off
+  fi
+
+  cargo build --features "${_features:-}" --release --target-dir target
+  ./scripts/mkmo locale/
+}
+
+package() {
+  cd "$srcdir/$pkgname-$pkgver"
+
+  # --- BOLT CONFIGURATION ---
+  # Define the path to the Android NDK LLVM BOLT toolchain
+  BOLT_BIN="/mnt/data/misaka_workspace/toolchains/android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-bolt"
+  # --- END BOLT CONFIGURATION ---
+
+  install -Dm755 target/release/paru "${pkgdir}/usr/bin/paru"
+  install -Dm644 paru.conf "${pkgdir}/etc/paru.conf"
+
+  # --- START BOLT OPTIMIZATION ---
+  if [ -f "$BOLT_BIN" ]; then
+    msg2 "Initiating BOLT Post-Link Optimization on paru..."
+    
+    # Create a temporary directory for profiling
+    mkdir -p bolt_profile_run
+    cd bolt_profile_run
+    
+    # 1. Profile the binary
+    # We use 'paru -Q' as a representative workload for startup and database query speed.
+    # We must explicitly point to the binary we just built (target/release/paru) or the one in pkgdir.
+    # Let's use the one in target/release to generate the profile.
+    msg2 "Sampling paru performance (Profiling)..."
+    
+    # Ensure it finds the God Mode libraries during profiling
+    export LD_LIBRARY_PATH="/opt/gcc-git-god/lib64:$LD_LIBRARY_PATH"
+    
+    perf record -e cycles:u -j any,u -- ../target/release/paru -Q > /dev/null 2>&1 || true
+    
+    cd ..
+
+    # 2. Convert profile to BOLT format
+    export PERF2BOLT="${BOLT_BIN%llvm-bolt}perf2bolt"
+    if [ -f "$PERF2BOLT" ]; then
+      msg2 "Applying BOLT to paru..."
+      
+      "$PERF2BOLT" ./target/release/paru -p bolt_profile_run/perf.data -o paru.fdata
+      
+      # 3. Optimize the binary
+      "$BOLT_BIN" ./target/release/paru -o ./paru.bolt -data paru.fdata \
+        -reorder-blocks=ext-tsp \
+        -reorder-functions=cdsort \
+        -split-functions \
+        -split-all-cold \
+        -split-eh \
+        -dyno-stats
+        
+      # 4. Overwrite the installed binary with the God Mode version
+      install -Dm755 ./paru.bolt "${pkgdir}/usr/bin/paru"
+      msg2 "BOLT optimization complete. The God Mode Paru is ready."
+    fi
+  else
+    warning "BOLT binary not found at $BOLT_BIN. Skipping optimization."
+  fi
+  # --- END BOLT OPTIMIZATION ---
+
+  install -Dm644 man/paru.8 "$pkgdir/usr/share/man/man8/paru.8"
+  install -Dm644 man/paru.conf.5 "$pkgdir/usr/share/man/man5/paru.conf.5"
+
+  install -Dm644 completions/bash "${pkgdir}/usr/share/bash-completion/completions/paru.bash"
+  install -Dm644 completions/fish "${pkgdir}/usr/share/fish/vendor_completions.d/paru.fish"
+  install -Dm644 completions/zsh "${pkgdir}/usr/share/zsh/site-functions/_paru"
+
+  install -d "$pkgdir/usr/share/"
+  cp -r locale "$pkgdir/usr/share/"
+}
