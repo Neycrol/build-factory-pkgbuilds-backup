@@ -11,7 +11,12 @@ mkdir -p "$BINREPO_DIR/repo" "$BINREPO_DIR/srcdest"
 
 export PKGDEST="$BINREPO_DIR/repo"
 export SRCDEST="${SRCDEST:-$BINREPO_DIR/srcdest}"
-export GIT_PROGRESS=1
+
+if [[ -n "${GITFLAGS:-}" ]]; then
+  export GITFLAGS="${GITFLAGS} --progress"
+else
+  export GITFLAGS="--progress"
+fi
 
 if [[ -f "$CPU_TARGET_FILE" ]]; then
   # shellcheck disable=SC1090
