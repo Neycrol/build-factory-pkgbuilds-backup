@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}\")/.." && pwd)"
 PACKAGES_FILE="${PACKAGES_FILE:-$ROOT_DIR/ci/packages-small.txt}"
 BINREPO_DIR="${BINREPO_DIR:-$ROOT_DIR/.binrepo}"
 REPO_NAME="${REPO_NAME:-buildfactory}"
@@ -12,11 +12,18 @@ mkdir -p "$BINREPO_DIR/repo" "$BINREPO_DIR/srcdest"
 export PKGDEST="$BINREPO_DIR/repo"
 export SRCDEST="${SRCDEST:-$BINREPO_DIR/srcdest}"
 
-MAKEPKG_CONF="${BINREPO_DIR}/makepkg-ci.conf"
-cat > "$MAKEPKG_CONF" <<'EOF'
-source /etc/makepkg.conf
-GITFLAGS=(--progress)
+GIT_CONFIG_FILE="$BINREPO_DIR/gitconfig"
+cat > "$GIT_CONFIG_FILE" <<'EOF'
+[fetch]
+    progress = true
+[clone]
+    progress = true
 EOF
+export MAKEPKG_GIT_CONFIG="$GIT_CONFIG_FILE"
+
+if [[ "${DEBUG_ENV:-0}" == "1" ]]; then
+  env | sort | grep -E '^(MAKEPKG|GIT)_' || true
+fi
 
 if [[ -f "$CPU_TARGET_FILE" ]]; then
   # shellcheck disable=SC1090
@@ -57,7 +64,7 @@ for pkgdir in "${packages[@]}"; do
   fi
 
   pushd "$ROOT_DIR/$pkgdir" >/dev/null
-  pkgpaths=$(MAKEPKG_CONF="$MAKEPKG_CONF" makepkg --packagelist --nobuild --skippgpcheck)
+  pkgpaths=$(makepkg --packagelist --nobuild --skippgpcheck)
 
   if [[ -z "$pkgpaths" ]]; then
     echo "Failed to compute package list."
@@ -89,7 +96,7 @@ for pkgdir in "${packages[@]}"; do
       PKGBUILD
   fi
 
-  MAKEPKG_CONF="$MAKEPKG_CONF" makepkg -sC --noconfirm --skippgpcheck
+  makepkg -sC --noconfirm --skippgpcheck
   popd >/dev/null
   echo "::endgroup::"
 
