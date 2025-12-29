@@ -1,0 +1,4 @@
+# Heavy builds (do not build on GitHub-hosted runners)
+browser/ungoogled-chromium
+game/proton-god/proton-tkg
+game/proton-god/wine-tkg-git

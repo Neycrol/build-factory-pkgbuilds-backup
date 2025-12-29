@@ -1,0 +1,26 @@
+# Small packages built on GitHub Actions
+android/android-tools-git
+android/scrcpy-git
+aur_published/bcachefs-kernel-dkms-git
+aur_published/bcachefs-tools-git
+aur_published/prismlauncher-zlib-compat-git
+cmake-git
+game/prismlauncher-fix
+glibc-god
+kde-bolt/konsole-git
+kde-bolt/kscreen
+kde-bolt/kwin
+kde-bolt/libkscreen
+kde-bolt/libplasma
+kde-bolt/plasma-workspace
+kde-bolt/protocols
+network/clash2singbox-git
+network/sing-box-master-git
+network/subconverter-optimized-git
+pacman-contrib-god
+pacman-git
+pacman-git/icu-god
+pacutils-god
+paru
+tools/cursor-agent-bin
+tools/fish_pgo
