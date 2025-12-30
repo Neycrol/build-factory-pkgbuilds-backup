@@ -302,6 +302,13 @@ for pkgdir in "${packages[@]}"; do
         exit 1
       fi
 
+      if [[ "$PUSH_EACH" == "1" ]]; then
+        if ! git -C "$BINREPO_DIR" pull --rebase origin main; then
+          echo "Failed to update binrepo before repo-add."
+          exit 1
+        fi
+      fi
+
       (cd "$BINREPO_DIR/repo" && repo-add -R "${REPO_NAME}.db.tar.gz" "${repo_files[@]}")
       ln -sf "$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.db"
       ln -sf "$BINREPO_DIR/repo/${REPO_NAME}.files.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.files"
@@ -314,7 +321,20 @@ for pkgdir in "${packages[@]}"; do
         done
         if ! git -C "$BINREPO_DIR" diff --cached --quiet; then
           git -C "$BINREPO_DIR" commit -m "Update ${pkgdir} $(date -u +%Y-%m-%d)"
-          git -C "$BINREPO_DIR" push
+          for attempt in 1 2 3; do
+            if git -C "$BINREPO_DIR" pull --rebase origin main; then
+              if git -C "$BINREPO_DIR" push; then
+                break
+              fi
+            else
+              git -C "$BINREPO_DIR" rebase --abort >/dev/null 2>&1 || true
+            fi
+            if [[ $attempt -eq 3 ]]; then
+              echo "Push failed after retries."
+              exit 1
+            fi
+            sleep 2
+          done
         fi
       fi
     else
