@@ -63,4 +63,8 @@ jobs:
           fi
           git commit -m "Update packages $(date -u +%Y-%m-%d)"
           git remote set-url origin "https://x-access-token:${BINREPO_TOKEN}@github.com/Neycrol/misaka-treasure-chest.git"
+          if ! git pull --rebase origin main; then
+            git rebase --abort >/dev/null 2>&1 || true
+            exit 1
+          fi
           git push
