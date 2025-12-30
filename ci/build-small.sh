@@ -84,6 +84,17 @@ if [[ -z "${MAKEFLAGS:-}" ]]; then
 fi
 
 if [[ "${CI:-}" == "true" ]]; then
+  MAKEPKG_CONF="${MAKEPKG_CONF:-$BINREPO_DIR/makepkg.conf}"
+  if [[ ! -f "$MAKEPKG_CONF" ]]; then
+    cp /etc/makepkg.conf "$MAKEPKG_CONF"
+  fi
+  if grep -qE '^OPTIONS=' "$MAKEPKG_CONF"; then
+    if ! grep -qE '^OPTIONS=.*!debug' "$MAKEPKG_CONF"; then
+      sed -i -E 's/(^OPTIONS=\([^)]*)\bdebug\b/\1!debug/' "$MAKEPKG_CONF"
+    fi
+  fi
+  export MAKEPKG_CONF
+
   if [[ -n "$GOD_GCC_URL" ]]; then
     if ! command -v curl >/dev/null 2>&1; then
       sudo pacman -S --noconfirm --needed curl
@@ -247,20 +258,36 @@ for pkgdir in "${packages[@]}"; do
 
   if [[ ${#built_pkgs[@]} -gt 0 ]]; then
     repo_files=()
+    debug_pkgs=()
     for pkgfile in "${built_pkgs[@]}"; do
-      repo_files+=("$(basename "$pkgfile")")
-    done
-    (cd "$BINREPO_DIR/repo" && repo-add -R "${REPO_NAME}.db.tar.gz" "${repo_files[@]}")
-    ln -sf "$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.db"
-    ln -sf "$BINREPO_DIR/repo/${REPO_NAME}.files.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.files"
-    repo_updated=1
-
-    if [[ "$PUSH_EACH" == "1" ]]; then
-      git -C "$BINREPO_DIR" add repo
-      if ! git -C "$BINREPO_DIR" diff --cached --quiet; then
-        git -C "$BINREPO_DIR" commit -m "Update ${pkgdir} $(date -u +%Y-%m-%d)"
-        git -C "$BINREPO_DIR" push
+      pkgbase=$(basename "$pkgfile")
+      if [[ "$pkgbase" == *-debug-*.pkg.tar.zst ]]; then
+        debug_pkgs+=("$pkgfile")
+      else
+        repo_files+=("$pkgbase")
       fi
+    done
+
+    if [[ ${#debug_pkgs[@]} -gt 0 ]]; then
+      echo "Removing debug packages to keep artifacts under GitHub limits."
+      rm -f "${debug_pkgs[@]}"
+    fi
+
+    if [[ ${#repo_files[@]} -gt 0 ]]; then
+      (cd "$BINREPO_DIR/repo" && repo-add -R "${REPO_NAME}.db.tar.gz" "${repo_files[@]}")
+      ln -sf "$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.db"
+      ln -sf "$BINREPO_DIR/repo/${REPO_NAME}.files.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.files"
+      repo_updated=1
+
+      if [[ "$PUSH_EACH" == "1" ]]; then
+        git -C "$BINREPO_DIR" add repo
+        if ! git -C "$BINREPO_DIR" diff --cached --quiet; then
+          git -C "$BINREPO_DIR" commit -m "Update ${pkgdir} $(date -u +%Y-%m-%d)"
+          git -C "$BINREPO_DIR" push
+        fi
+      fi
+    else
+      echo "Only debug packages built; skipping repo-add."
     fi
   fi
 
