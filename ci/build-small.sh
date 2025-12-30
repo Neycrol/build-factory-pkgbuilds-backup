@@ -302,17 +302,46 @@ for pkgdir in "${packages[@]}"; do
         exit 1
       fi
 
-      if [[ "$PUSH_EACH" == "1" ]]; then
-        if ! git -C "$BINREPO_DIR" pull --rebase origin main; then
-          echo "Failed to update binrepo before repo-add."
-          exit 1
-        fi
+      repo_db="$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz"
+      repo_files_db="$BINREPO_DIR/repo/${REPO_NAME}.files.tar.gz"
+      db_entries=""
+      if [[ -f "$repo_db" ]]; then
+        db_entries=$(bsdtar -tf "$repo_db" 2>/dev/null || true)
       fi
 
-      (cd "$BINREPO_DIR/repo" && repo-add -R "${REPO_NAME}.db.tar.gz" "${repo_files[@]}")
-      ln -sf "$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.db"
-      ln -sf "$BINREPO_DIR/repo/${REPO_NAME}.files.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.files"
-      repo_updated=1
+      new_repo_files=()
+      for pkgbase in "${repo_files[@]}"; do
+        if [[ -n "$db_entries" ]]; then
+          pkgid="${pkgbase%.pkg.tar.zst}"
+          pkgid="${pkgid%-x86_64}"
+          pkgid="${pkgid%-any}"
+          if grep -Fxq "${pkgid}/desc" <<<"$db_entries"; then
+            echo "Repo DB already has ${pkgid}; skipping repo-add for it."
+            continue
+          fi
+        fi
+        new_repo_files+=("$pkgbase")
+      done
+
+      if [[ ${#new_repo_files[@]} -gt 0 ]]; then
+        if [[ "$PUSH_EACH" == "1" ]]; then
+          if ! git -C "$BINREPO_DIR" pull --rebase origin main; then
+            echo "Failed to update binrepo before repo-add."
+            exit 1
+          fi
+        fi
+
+        if ! (cd "$BINREPO_DIR/repo" && repo-add -R "${REPO_NAME}.db.tar.gz" "${new_repo_files[@]}"); then
+          echo "repo-add failed; rebuilding database from all package files."
+          rm -f "$repo_db" "$repo_files_db"
+          (cd "$BINREPO_DIR/repo" && repo-add -R "${REPO_NAME}.db.tar.gz" *.pkg.tar.zst)
+        fi
+        ln -sf "$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.db"
+        ln -sf "$BINREPO_DIR/repo/${REPO_NAME}.files.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.files"
+        repo_updated=1
+      else
+        echo "Repo DB already contains entries; skipping repo-add."
+      fi
 
       if [[ "$PUSH_EACH" == "1" ]]; then
         git -C "$BINREPO_DIR" add repo
@@ -357,7 +386,10 @@ for pkgdir in "${packages[@]}"; do
 done
 
 if [[ "$repo_updated" -eq 0 ]]; then
-  if ls "$BINREPO_DIR/repo"/*.pkg.tar.zst >/dev/null 2>&1; then
+  repo_db="$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz"
+  if [[ -f "$repo_db" ]]; then
+    echo "Repo DB already present; skip rebuild."
+  elif ls "$BINREPO_DIR/repo"/*.pkg.tar.zst >/dev/null 2>&1; then
     (cd "$BINREPO_DIR/repo" && repo-add -R "${REPO_NAME}.db.tar.gz" *.pkg.tar.zst)
     ln -sf "$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.db"
     ln -sf "$BINREPO_DIR/repo/${REPO_NAME}.files.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.files"
