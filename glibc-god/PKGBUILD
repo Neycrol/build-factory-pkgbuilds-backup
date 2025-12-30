@@ -7,7 +7,7 @@ pkgdesc="GNU C Library (Git Master) - Native Optimized with Selective PGO (Built
 arch=(x86_64)
 url='https://www.gnu.org/software/libc'
 license=(GPL-2.0-or-later LGPL-2.1-or-later)
-makedepends=(git gd lib32-gcc-libs python)
+makedepends=(git lib32-gcc-libs python)
 # 核心禁忌：关 LTO，关 Debug，关 Strip
 options=(staticlibs !lto !debug !strip)
 # === 核心修改：定义上游源地址 ===

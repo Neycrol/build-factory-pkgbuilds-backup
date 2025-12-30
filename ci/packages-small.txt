@@ -22,5 +22,6 @@ pacman-git
 pacman-git/icu-god
 pacutils-god
 paru
+tools/codex-git
 tools/cursor-agent-bin
 tools/fish_pgo
