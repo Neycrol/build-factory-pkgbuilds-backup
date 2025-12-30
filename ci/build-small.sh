@@ -220,6 +220,23 @@ for pkgdir in "${packages[@]}"; do
     exit 1
   fi
 
+  remote_present=true
+  for pkgfile in "${pkgpaths[@]}"; do
+    pkgbase=$(basename "$pkgfile")
+    if git -C "$BINREPO_DIR" cat-file -e "HEAD:repo/$pkgbase" 2>/dev/null; then
+      continue
+    fi
+    remote_present=false
+    break
+  done
+
+  if [[ "$remote_present" == true ]]; then
+    echo "Remote repo already has all package files; skipping build."
+    popd >/dev/null
+    echo "::endgroup::"
+    continue
+  fi
+
   missing=false
   for pkgfile in "${pkgpaths[@]}"; do
     if [[ ! -f "$pkgfile" ]]; then
@@ -274,6 +291,17 @@ for pkgdir in "${packages[@]}"; do
     fi
 
     if [[ ${#repo_files[@]} -gt 0 ]]; then
+      missing_repo_files=()
+      for pkgbase in "${repo_files[@]}"; do
+        if [[ ! -f "$BINREPO_DIR/repo/$pkgbase" ]]; then
+          missing_repo_files+=("$pkgbase")
+        fi
+      done
+      if [[ ${#missing_repo_files[@]} -gt 0 ]]; then
+        echo "Expected package files missing in repo: ${missing_repo_files[*]}"
+        exit 1
+      fi
+
       (cd "$BINREPO_DIR/repo" && repo-add -R "${REPO_NAME}.db.tar.gz" "${repo_files[@]}")
       ln -sf "$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.db"
       ln -sf "$BINREPO_DIR/repo/${REPO_NAME}.files.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.files"
@@ -281,6 +309,9 @@ for pkgdir in "${packages[@]}"; do
 
       if [[ "$PUSH_EACH" == "1" ]]; then
         git -C "$BINREPO_DIR" add repo
+        for pkgbase in "${repo_files[@]}"; do
+          git -C "$BINREPO_DIR" add -f "repo/$pkgbase"
+        done
         if ! git -C "$BINREPO_DIR" diff --cached --quiet; then
           git -C "$BINREPO_DIR" commit -m "Update ${pkgdir} $(date -u +%Y-%m-%d)"
           git -C "$BINREPO_DIR" push
