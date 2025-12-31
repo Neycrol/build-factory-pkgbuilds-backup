@@ -220,6 +220,23 @@ for pkgdir in "${packages[@]}"; do
     exit 1
   fi
 
+  filtered_pkgpaths=()
+  for pkgfile in "${pkgpaths[@]}"; do
+    pkgbase=$(basename "$pkgfile")
+    if [[ "$pkgbase" == *-debug-*.pkg.tar.zst ]]; then
+      continue
+    fi
+    filtered_pkgpaths+=("$pkgfile")
+  done
+  pkgpaths=("${filtered_pkgpaths[@]}")
+
+  if [[ ${#pkgpaths[@]} -eq 0 ]]; then
+    echo "Only debug packages detected; skipping."
+    popd >/dev/null
+    echo "::endgroup::"
+    continue
+  fi
+
   remote_present=true
   for pkgfile in "${pkgpaths[@]}"; do
     pkgbase=$(basename "$pkgfile")
