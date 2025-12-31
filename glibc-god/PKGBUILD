@@ -58,6 +58,10 @@ build() {
   export LDFLAGS="-Wl,-O2,--sort-common,--as-needed,-z,relro,-z,now -fuse-ld=bfd"
   export CPPFLAGS=""
 
+  # Force-disable gd detection to avoid memusagestat pulling in libheif/libstdc++ in CI.
+  export ac_cv_header_gd_h=no
+  export ac_cv_lib_gd_gdImageCreate=no
+
   # === 2. 制作智能白名单 Wrapper (核心) ===
   # 写入 srcdir (构建目录)，不污染源码目录
   cat << 'EOF' > "$srcdir/gcc-wrapper"
