@@ -2,7 +2,7 @@
 # Maintainer: Daniel M. Capella <polyzen@archlinux.org>
 
 pkgname=pacman-contrib
-pkgver=1.13.1
+pkgver=0.r0.g0000000
 pkgrel=1
 pkgdesc='Contributed scripts and tools for pacman systems'
 arch=(x86_64)
@@ -24,10 +24,18 @@ optdepends=(
   'vim: default diff program for pacdiff'
   'neovim: default diff program for pacdiff if EDITOR=nvim'
 )
-source=("git+$url.git#tag=v$pkgver")
-b2sums=('cf1396aa108c6742d74a369456dfdf6a83286c0e8996b730ed16fa8907d0253ebb49ddcd6b548959d5df8d30af223d7883bbabda9e1dfb006d175400e37a105f')
+source=("git+$url.git")
+b2sums=('SKIP')
 validpgpkeys=(04DC3FB1445FECA813C27EFAEA4F7B321A906AD9 44A62127789A949F2F082ED429C71CE612B57264) # Daniel M. Capella <polyzen@archlinux.org>
 #             5134EF9EAF65F95B6BB1608E50FB9B273A9D0BB5)  # Johannes Löthberg <johannes@kyriasis.com>
+
+pkgver() {
+  cd $pkgname
+  printf "%s.r%s.g%s" \
+    "$(git show -s --format=%cd --date=format:%Y%m%d HEAD)" \
+    "$(git rev-list --count HEAD)" \
+    "$(git rev-parse --short HEAD)"
+}
 
 prepare() {
   cd $pkgname
