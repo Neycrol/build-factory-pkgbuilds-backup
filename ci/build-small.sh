@@ -237,6 +237,33 @@ for pkgdir in "${packages[@]}"; do
     continue
   fi
 
+  repo_db="$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz"
+  db_entries=""
+  if [[ -f "$repo_db" ]]; then
+    db_entries=$(bsdtar -tf "$repo_db" 2>/dev/null || true)
+  fi
+
+  if [[ -n "$db_entries" ]]; then
+    all_in_db=true
+    for pkgfile in "${pkgpaths[@]}"; do
+      pkgbase=$(basename "$pkgfile")
+      pkgid="${pkgbase%.pkg.tar.zst}"
+      pkgid="${pkgid%-x86_64}"
+      pkgid="${pkgid%-any}"
+      if ! grep -Fxq "${pkgid}/desc" <<<"$db_entries"; then
+        all_in_db=false
+        break
+      fi
+    done
+
+    if [[ "$all_in_db" == true ]]; then
+      echo "Remote repo db already has all package entries; skipping build."
+      popd >/dev/null
+      echo "::endgroup::"
+      continue
+    fi
+  fi
+
   remote_present=true
   for pkgfile in "${pkgpaths[@]}"; do
     pkgbase=$(basename "$pkgfile")
