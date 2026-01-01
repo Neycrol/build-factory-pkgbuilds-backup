@@ -81,7 +81,7 @@ for ((i=0; i<${#ARGS[@]}; i++)); do
             fi
         done
     fi
-done
+ done
 
 # 双重保险：排除 rtld
 for arg in "${ARGS[@]}"; do
@@ -89,7 +89,7 @@ for arg in "${ARGS[@]}"; do
         ENABLE_PGO=0
         break
     fi
-done
+ done
 
 PGO_MODE="${GLIBC_PGO_MODE:-}"
 if [ "$ENABLE_PGO" -eq 1 ] && [ -n "$PGO_MODE" ]; then
@@ -106,6 +106,7 @@ EOF
   local _configure_flags=(
       --prefix=/usr
       --with-headers=/usr/include
+      --without-gd
       --enable-bind-now
       --disable-fortify-source
       --enable-kernel=5.15
