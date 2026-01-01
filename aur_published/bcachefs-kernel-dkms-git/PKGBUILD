@@ -76,7 +76,7 @@ _make_pkgver() {
 }
 
 pkgver() {
-    if ! _update_repo; then
+    if ! _update_repo >/dev/null; then
         printf "%s" "$pkgver"
         return 0
     fi
