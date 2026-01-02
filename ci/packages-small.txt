@@ -8,12 +8,12 @@ media/ffmpeg-god-git
 game/prismlauncher-fix
 glibc-god
 kde-bolt/konsole-git
+kde-bolt/protocols
+kde-bolt/libkscreen
 kde-bolt/kscreen
 kde-bolt/kwin
-kde-bolt/libkscreen
 kde-bolt/libplasma
 kde-bolt/plasma-workspace
-kde-bolt/protocols
 network/clash2singbox-git
 network/sing-box-master-git
 network/subconverter-optimized-git
