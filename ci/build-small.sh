@@ -19,6 +19,19 @@ mkdir -p "$BINREPO_DIR/repo" "$BINREPO_DIR/srcdest"
 export PKGDEST="$BINREPO_DIR/repo"
 export SRCDEST="${SRCDEST:-$BINREPO_DIR/srcdest}"
 
+install_pkgs_if_present() {
+  local to_install=()
+  for path in "$@"; do
+    if [[ -f "$path" ]]; then
+      to_install+=( "$path" )
+    fi
+  done
+  if [[ ${#to_install[@]} -eq 0 ]]; then
+    return 1
+  fi
+  sudo pacman -U --noconfirm --needed "${to_install[@]}"
+}
+
 GIT_CONFIG_FILE="$BINREPO_DIR/gitconfig"
 cat > "$GIT_CONFIG_FILE" <<'EOF'
 [fetch]
@@ -200,6 +213,11 @@ if [[ ${#packages[@]} -eq 0 ]]; then
   exit 0
 fi
 
+INSTALL_AFTER_BUILD=(
+  "kde-bolt/protocols"
+  "kde-bolt/libkscreen"
+)
+
 repo_updated=0
 
 for pkgdir in "${packages[@]}"; do
@@ -280,6 +298,11 @@ for pkgdir in "${packages[@]}"; do
     continue
   fi
 
+  repo_pkgpaths=()
+  for pkgfile in "${pkgpaths[@]}"; do
+    repo_pkgpaths+=( "$BINREPO_DIR/repo/$(basename "$pkgfile")" )
+  done
+
   repo_db="$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz"
   db_entries=""
   if [[ -f "$repo_db" ]]; then
@@ -300,10 +323,19 @@ for pkgdir in "${packages[@]}"; do
     done
 
     if [[ "$all_in_db" == true ]]; then
-      echo "Remote repo db already has all package entries; skipping build."
-      popd >/dev/null
-      echo "::endgroup::"
-      continue
+      if [[ " ${INSTALL_AFTER_BUILD[*]} " == *" ${pkgdir} "* ]]; then
+        if ! install_pkgs_if_present "${repo_pkgpaths[@]}"; then
+          echo "Repo packages missing; will rebuild."
+          all_in_db=false
+        fi
+      fi
+
+      if [[ "$all_in_db" == true ]]; then
+        echo "Remote repo db already has all package entries; skipping build."
+        popd >/dev/null
+        echo "::endgroup::"
+        continue
+      fi
     fi
   fi
 
@@ -318,10 +350,19 @@ for pkgdir in "${packages[@]}"; do
   done
 
   if [[ "$remote_present" == true ]]; then
-    echo "Remote repo already has all package files; skipping build."
-    popd >/dev/null
-    echo "::endgroup::"
-    continue
+    if [[ " ${INSTALL_AFTER_BUILD[*]} " == *" ${pkgdir} "* ]]; then
+      if ! install_pkgs_if_present "${repo_pkgpaths[@]}"; then
+        echo "Repo packages missing; will rebuild."
+        remote_present=false
+      fi
+    fi
+
+    if [[ "$remote_present" == true ]]; then
+      echo "Remote repo already has all package files; skipping build."
+      popd >/dev/null
+      echo "::endgroup::"
+      continue
+    fi
   fi
 
   missing=false
@@ -333,6 +374,9 @@ for pkgdir in "${packages[@]}"; do
   done
 
   if [[ "$missing" == false ]]; then
+    if [[ " ${INSTALL_AFTER_BUILD[*]} " == *" ${pkgdir} "* ]]; then
+      install_pkgs_if_present "${pkgpaths[@]}"
+    fi
     echo "Up-to-date; skipping build."
     popd >/dev/null
     echo "::endgroup::"
@@ -362,6 +406,7 @@ for pkgdir in "${packages[@]}"; do
 
   if [[ ${#built_pkgs[@]} -gt 0 ]]; then
     repo_files=()
+    repo_pkgs=()
     debug_pkgs=()
     for pkgfile in "${built_pkgs[@]}"; do
       pkgbase=$(basename "$pkgfile")
@@ -369,10 +414,15 @@ for pkgdir in "${packages[@]}"; do
         debug_pkgs+=("$pkgfile")
       else
         repo_files+=("$pkgbase")
+        repo_pkgs+=("$pkgfile")
       fi
     done
 
     if [[ ${#debug_pkgs[@]} -gt 0 ]]; then
+    if [[ " ${INSTALL_AFTER_BUILD[*]} " == *" ${pkgdir} "* ]] && [[ ${#repo_pkgs[@]} -gt 0 ]]; then
+      install_pkgs_if_present "${repo_pkgs[@]}"
+    fi
+
       echo "Removing debug packages to keep artifacts under GitHub limits."
       rm -f "${debug_pkgs[@]}"
     fi
@@ -389,7 +439,12 @@ for pkgdir in "${packages[@]}"; do
         exit 1
       fi
 
-      repo_db="$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz"
+      repo_pkgpaths=()
+  for pkgfile in "${pkgpaths[@]}"; do
+    repo_pkgpaths+=( "$BINREPO_DIR/repo/$(basename "$pkgfile")" )
+  done
+
+  repo_db="$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz"
       repo_files_db="$BINREPO_DIR/repo/${REPO_NAME}.files.tar.gz"
       db_entries=""
       if [[ -f "$repo_db" ]]; then
@@ -474,6 +529,11 @@ for pkgdir in "${packages[@]}"; do
 done
 
 if [[ "$repo_updated" -eq 0 ]]; then
+  repo_pkgpaths=()
+  for pkgfile in "${pkgpaths[@]}"; do
+    repo_pkgpaths+=( "$BINREPO_DIR/repo/$(basename "$pkgfile")" )
+  done
+
   repo_db="$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz"
   if [[ -f "$repo_db" ]]; then
     echo "Repo DB already present; skip rebuild."
