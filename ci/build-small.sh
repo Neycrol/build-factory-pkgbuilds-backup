@@ -212,7 +212,50 @@ for pkgdir in "${packages[@]}"; do
   fi
 
   pushd "$ROOT_DIR/$pkgdir" >/dev/null
-  mapfile -t pkgpaths < <(makepkg --packagelist --nobuild --skippgpcheck)
+
+  if grep -q '^pkgver()' PKGBUILD; then
+    makepkg -o --skippgpcheck
+  fi
+
+  srcinfo=$(makepkg --printsrcinfo --skippgpcheck)
+  pkgver=$(awk -F' = ' '/^\tpkgver = /{print $2; exit}' <<<"$srcinfo")
+  pkgrel=$(awk -F' = ' '/^\tpkgrel = /{print $2; exit}' <<<"$srcinfo")
+  epoch=$(awk -F' = ' '/^\tepoch = /{print $2; exit}' <<<"$srcinfo")
+
+  mapfile -t pkgnames < <(awk -F' = ' '/^\tpkgname = /{print $2}' <<<"$srcinfo")
+  mapfile -t archs < <(awk -F' = ' '/^\tarch = /{print $2}' <<<"$srcinfo")
+
+  arch=""
+  if [[ ${#archs[@]} -gt 0 ]]; then
+    for candidate in "${archs[@]}"; do
+      if [[ "$candidate" == "x86_64" ]]; then
+        arch="x86_64"
+        break
+      fi
+    done
+    if [[ -z "$arch" ]]; then
+      if [[ " ${archs[*]} " == *" any "* ]]; then
+        arch="any"
+      else
+        arch="${archs[0]}"
+      fi
+    fi
+  fi
+
+  if [[ -z "$arch" ]]; then
+    echo "Failed to determine arch from srcinfo."
+    popd >/dev/null
+    exit 1
+  fi
+
+  if [[ -n "$epoch" ]]; then
+    pkgver="${epoch}:${pkgver}"
+  fi
+
+  pkgpaths=()
+  for name in "${pkgnames[@]}"; do
+    pkgpaths+=("$PKGDEST/${name}-${pkgver}-${pkgrel}-${arch}.pkg.tar.zst")
+  done
 
   if [[ ${#pkgpaths[@]} -eq 0 ]]; then
     echo "Failed to compute package list."
@@ -380,8 +423,9 @@ for pkgdir in "${packages[@]}"; do
           rm -f "$repo_db" "$repo_files_db"
           (cd "$BINREPO_DIR/repo" && repo-add -R "${REPO_NAME}.db.tar.gz" *.pkg.tar.zst)
         fi
-        ln -sf "$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.db"
-        ln -sf "$BINREPO_DIR/repo/${REPO_NAME}.files.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.files"
+        rm -f "$BINREPO_DIR/repo/${REPO_NAME}.db" "$BINREPO_DIR/repo/${REPO_NAME}.files"
+        cp -f "$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.db"
+        cp -f "$BINREPO_DIR/repo/${REPO_NAME}.files.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.files"
         repo_updated=1
       else
         echo "Repo DB already contains entries; skipping repo-add."
@@ -435,8 +479,9 @@ if [[ "$repo_updated" -eq 0 ]]; then
     echo "Repo DB already present; skip rebuild."
   elif ls "$BINREPO_DIR/repo"/*.pkg.tar.zst >/dev/null 2>&1; then
     (cd "$BINREPO_DIR/repo" && repo-add -R "${REPO_NAME}.db.tar.gz" *.pkg.tar.zst)
-    ln -sf "$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.db"
-    ln -sf "$BINREPO_DIR/repo/${REPO_NAME}.files.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.files"
+    rm -f "$BINREPO_DIR/repo/${REPO_NAME}.db" "$BINREPO_DIR/repo/${REPO_NAME}.files"
+    cp -f "$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.db"
+    cp -f "$BINREPO_DIR/repo/${REPO_NAME}.files.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.files"
   else
     echo "No packages found; skip repo-add."
   fi
