@@ -5,6 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKAGES_FILE="${PACKAGES_FILE:-$ROOT_DIR/ci/packages-small.txt}"
 BINREPO_DIR="${BINREPO_DIR:-$ROOT_DIR/.binrepo}"
 REPO_NAME="${REPO_NAME:-buildfactory}"
+RELEASE_TAG="${RELEASE_TAG:-buildfactory}"
+RELEASE_REPO="${RELEASE_REPO:-}"
+RELEASE_UPLOAD="${RELEASE_UPLOAD:-1}"
 CPU_TARGET_FILE="${CPU_TARGET_FILE:-$ROOT_DIR/ci/cpu-target.conf}"
 GOD_GCC_URL="${GOD_GCC_URL:-}"
 GOD_GCC_SHA256="${GOD_GCC_SHA256:-}"
@@ -40,6 +43,150 @@ cat > "$GIT_CONFIG_FILE" <<'EOF'
     progress = true
 EOF
 export MAKEPKG_GIT_CONFIG="$GIT_CONFIG_FILE"
+
+get_release_owner_repo() {
+  if [[ -n "${RELEASE_REPO}" ]]; then
+    echo "${RELEASE_REPO}"
+    return 0
+  fi
+  local origin_url
+  origin_url=$(git -C "${BINREPO_DIR}" remote get-url origin 2>/dev/null || true)
+  origin_url=${origin_url#https://github.com/}
+  origin_url=${origin_url#git@github.com:}
+  origin_url=${origin_url%.git}
+  if [[ -z "${origin_url}" || "${origin_url}" != */* ]]; then
+    return 1
+  fi
+  echo "${origin_url}"
+}
+
+upload_release_assets() {
+  if [[ "${RELEASE_UPLOAD}" != "1" ]]; then
+    return 0
+  fi
+  if [[ -z "${BINREPO_TOKEN:-}" ]]; then
+    echo "BINREPO_TOKEN missing; skipping release upload."
+    return 0
+  fi
+  if [[ ${#@} -eq 0 ]]; then
+    return 0
+  fi
+  if ! command -v curl >/dev/null 2>&1; then
+    sudo pacman -S --noconfirm --needed curl
+  fi
+  if ! command -v python >/dev/null 2>&1; then
+    sudo pacman -S --noconfirm --needed python
+  fi
+  local owner_repo
+  owner_repo=$(get_release_owner_repo || true)
+  if [[ -z "${owner_repo}" ]]; then
+    echo "Release repo not detected; skipping upload."
+    return 0
+  fi
+  local owner=${owner_repo%%/*}
+  local repo=${owner_repo#*/}
+  local release_info
+  release_info=$(python - "${owner}" "${repo}" "${RELEASE_TAG}" "${BINREPO_TOKEN}" <<'PY'
+import json
+import sys
+import urllib.request
+import urllib.error
+
+owner, repo, tag, token = sys.argv[1:5]
+api_base = f"https://api.github.com/repos/{owner}/{repo}"
+
+def request(url, method="GET", data=None):
+    req = urllib.request.Request(url, data=data, method=method)
+    req.add_header("Authorization", f"Bearer {token}")
+    req.add_header("Accept", "application/vnd.github+json")
+    return urllib.request.urlopen(req)
+
+def get_release():
+    try:
+        with request(f"{api_base}/releases/tags/{tag}") as resp:
+            return json.load(resp)
+    except urllib.error.HTTPError as exc:
+        if exc.code != 404:
+            raise
+    payload = json.dumps({
+        "tag_name": tag,
+        "name": tag,
+        "body": "Auto-published by CI",
+        "draft": False,
+        "prerelease": False,
+    }).encode("utf-8")
+    with request(f"{api_base}/releases", method="POST", data=payload) as resp:
+        return json.load(resp)
+
+release = get_release()
+upload_url = release.get("upload_url", "").split("{")[0]
+print(f"{release.get('id')} {upload_url}")
+PY
+  )
+  local release_id=${release_info%% *}
+  local upload_url=${release_info#* }
+  if [[ -z "${release_id}" || -z "${upload_url}" ]]; then
+    echo "Failed to resolve release info; skipping upload."
+    return 1
+  fi
+  mapfile -t asset_lines < <(python - "${owner}" "${repo}" "${release_id}" "${BINREPO_TOKEN}" <<'PY'
+import json
+import sys
+import urllib.request
+
+owner, repo, release_id, token = sys.argv[1:5]
+api_base = f"https://api.github.com/repos/{owner}/{repo}"
+
+def request(url):
+    req = urllib.request.Request(url)
+    req.add_header("Authorization", f"Bearer {token}")
+    req.add_header("Accept", "application/vnd.github+json")
+    return urllib.request.urlopen(req)
+
+page = 1
+while True:
+    with request(f"{api_base}/releases/{release_id}/assets?per_page=100&page={page}") as resp:
+        assets = json.load(resp)
+    if not assets:
+        break
+    for asset in assets:
+        name = asset.get("name")
+        asset_id = asset.get("id")
+        if name and asset_id:
+            print(f"{name}	{asset_id}")
+    page += 1
+PY
+  )
+  declare -A assets
+  local line
+  for line in "${asset_lines[@]}"; do
+    local name=${line%%$"	"*}
+    local asset_id=${line#*$"	"}
+    assets["${name}"]=${asset_id}
+  done
+  local file
+  for file in "$@"; do
+    if [[ ! -f "${file}" ]]; then
+      continue
+    fi
+    local name
+    name=$(basename "${file}")
+    if [[ -n "${assets[$name]:-}" ]]; then
+      curl -sS -X DELETE -H "Authorization: Bearer ${BINREPO_TOKEN}" -H "Accept: application/vnd.github+json" \
+        "https://api.github.com/repos/${owner}/${repo}/releases/assets/${assets[$name]}" >/dev/null
+    fi
+    local encoded
+    encoded=$(python - "${name}" <<'PY'
+import sys
+import urllib.parse
+print(urllib.parse.quote(sys.argv[1]))
+PY
+    )
+    curl -sS -L --fail -X POST -H "Authorization: Bearer ${BINREPO_TOKEN}" \
+      -H "Content-Type: application/octet-stream" \
+      --data-binary "@${file}" "${upload_url}?name=${encoded}" >/dev/null
+  done
+}
 
 GIT_WRAPPER_DIR="$BINREPO_DIR/git-wrapper"
 mkdir -p "$GIT_WRAPPER_DIR"
@@ -418,11 +565,11 @@ for pkgdir in "${packages[@]}"; do
       fi
     done
 
-    if [[ ${#debug_pkgs[@]} -gt 0 ]]; then
     if [[ " ${INSTALL_AFTER_BUILD[*]} " == *" ${pkgdir} "* ]] && [[ ${#repo_pkgs[@]} -gt 0 ]]; then
       install_pkgs_if_present "${repo_pkgs[@]}"
     fi
 
+    if [[ ${#debug_pkgs[@]} -gt 0 ]]; then
       echo "Removing debug packages to keep artifacts under GitHub limits."
       rm -f "${debug_pkgs[@]}"
     fi
@@ -482,15 +629,22 @@ for pkgdir in "${packages[@]}"; do
         cp -f "$BINREPO_DIR/repo/${REPO_NAME}.db.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.db"
         cp -f "$BINREPO_DIR/repo/${REPO_NAME}.files.tar.gz" "$BINREPO_DIR/repo/${REPO_NAME}.files"
         repo_updated=1
+        release_upload_files=()
+        if [[ -f "${BINREPO_DIR}/repo/${REPO_NAME}.db.tar.gz" ]]; then
+          release_upload_files+=("${BINREPO_DIR}/repo/${REPO_NAME}.db.tar.gz" "${BINREPO_DIR}/repo/${REPO_NAME}.files.tar.gz" "${BINREPO_DIR}/repo/${REPO_NAME}.db" "${BINREPO_DIR}/repo/${REPO_NAME}.files")
+        fi
+        if [[ ${#repo_pkgs[@]} -gt 0 ]]; then
+          release_upload_files+=("${repo_pkgs[@]}")
+        fi
+        if [[ ${#release_upload_files[@]} -gt 0 ]]; then
+          upload_release_assets "${release_upload_files[@]}"
+        fi
       else
         echo "Repo DB already contains entries; skipping repo-add."
       fi
 
       if [[ "$PUSH_EACH" == "1" ]]; then
-        git -C "$BINREPO_DIR" add repo
-        for pkgbase in "${repo_files[@]}"; do
-          git -C "$BINREPO_DIR" add -f "repo/$pkgbase"
-        done
+        git -C "$BINREPO_DIR" add "repo/${REPO_NAME}.db.tar.gz" "repo/${REPO_NAME}.files.tar.gz" "repo/${REPO_NAME}.db" "repo/${REPO_NAME}.files"
         if ! git -C "$BINREPO_DIR" diff --cached --quiet; then
           git -C "$BINREPO_DIR" commit -m "Update ${pkgdir} $(date -u +%Y-%m-%d)"
           for attempt in 1 2 3; do
