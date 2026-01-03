@@ -56,7 +56,7 @@ jobs:
           cd "$BINREPO_DIR"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add repo
+          git add "repo/${REPO_NAME}.db.tar.gz" "repo/${REPO_NAME}.files.tar.gz" "repo/${REPO_NAME}.db" "repo/${REPO_NAME}.files"
           if git diff --cached --quiet; then
             echo "No repo changes."
             exit 0
