@@ -32,6 +32,10 @@ jobs:
     env:
       GOD_GCC_URL: https://github.com/Neycrol/build-factory-pkgbuilds-backup/releases/download/gcc-git-god-16/gcc-git-god-16.0.0.r20251220-1-x86_64.pkg.tar.zst
       GOD_GCC_TOKEN: ${{ github.token }}
+      BINREPO_TOKEN: ${{ secrets.BINREPO_TOKEN }}
+      PUSH_EACH: "1"
+      REPO_NAME: buildfactory
+      RELEASE_TAG: buildfactory
     steps:
       - uses: actions/checkout@v4
       
@@ -58,7 +62,7 @@ jobs:
           retention-days: 1
           if-no-files-found: ignore
 
-  # Phase 3: Logistics & Supply
+  # Phase 3: Logistics & Supply (Safety Net & Final Sync)
   finalize:
     needs: execute
     runs-on: ubuntu-latest

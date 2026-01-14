@@ -3,6 +3,7 @@ set -euo pipefail
 
 # build-single.sh - The Soldier
 # Executes a surgical strike build on a single package target.
+# NOW FEATURING: Immediate Air Support (Auto-Upload)
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 <package_path>"
@@ -14,17 +15,20 @@ ROOT_DIR="$(pwd)"
 ARTIFACT_DIR="${ROOT_DIR}/artifacts"
 mkdir -p "$ARTIFACT_DIR"
 
+# Env Vars for Push Each
+PUSH_EACH="${PUSH_EACH:-0}"
+REPO_NAME="${REPO_NAME:-buildfactory}"
+RELEASE_TAG="${RELEASE_TAG:-buildfactory}"
+
 echo "::group::[Setup] Initializing Combat Environment"
 
 # 1. System Prep
-# Initialize pacman keyring and update system
 pacman-key --init
 pacman-key --populate archlinux
-# Retry update to handle transient mirror failures
 for i in {1..3}; do
   pacman -Syu --noconfirm && break || sleep 5
 done
-pacman -S --noconfirm --needed git sudo curl python jq base-devel
+pacman -S --noconfirm --needed git sudo curl python jq base-devel openssh
 
 # 2. Builder User
 if ! id -u builder >/dev/null 2>&1; then
@@ -34,7 +38,6 @@ fi
 chown -R builder:builder "$ROOT_DIR"
 
 # 3. God Mode GCC Injection
-# Copied and adapted from original script
 GOD_GCC_URL="${GOD_GCC_URL:-}"
 GOD_GCC_TOKEN="${GOD_GCC_TOKEN:-}"
 
@@ -43,7 +46,6 @@ if [[ -n "$GOD_GCC_URL" ]]; then
   tmp_pkg=$(mktemp)
   download_ok=0
   
-  # Try direct download first
   curl_args=(-L --fail --retry 3)
   if [[ -n "$GOD_GCC_TOKEN" ]]; then
     curl_args+=(-H "Authorization: Bearer $GOD_GCC_TOKEN")
@@ -53,9 +55,7 @@ if [[ -n "$GOD_GCC_URL" ]]; then
     download_ok=1
   else
     echo "Direct download failed. Attempting GitHub API resolution..."
-    # Python fallback for GH API
     if [[ -n "$GOD_GCC_TOKEN" ]] && [[ "$GOD_GCC_URL" == https://github.com/*/releases/download/* ]]; then
-       # We use a heredoc for python code to avoid quoting hell
        cat <<EOF > resolve_asset.py
 import sys, json, urllib.request
 try:
@@ -79,7 +79,6 @@ except Exception as e:
 EOF
        python3 resolve_asset.py > asset_url.txt || true
        rm -f resolve_asset.py
-       
        asset_url=$(cat asset_url.txt)
        if [[ -n "$asset_url" ]]; then
          curl -L --fail -H "Authorization: Bearer $GOD_GCC_TOKEN" -H "Accept: application/octet-stream" "$asset_url" -o "$tmp_pkg" && download_ok=1
@@ -96,12 +95,10 @@ EOF
   rm -f "$tmp_pkg"
 fi
 
-# Setup GCC PATH if installed
 if [[ -x "/opt/gcc-git-god/bin/gcc" ]]; then
   export PATH="/opt/gcc-git-god/bin:$PATH"
   echo ">> God Mode Active: $(/opt/gcc-git-god/bin/gcc --version | head -n1)"
 else
-  # Fallback symlinks
   install -d /opt/gcc-git-god/bin
   ln -sf /usr/bin/gcc /opt/gcc-git-god/bin/gcc
   ln -sf /usr/bin/g++ /opt/gcc-git-god/bin/g++
@@ -109,44 +106,7 @@ fi
 
 # 4. Makepkg Configuration
 MAKEPKG_CONF="/etc/makepkg.conf"
-# Optimization flags (User's preference)
 sed -i 's/^OPTIONS=(docs/OPTIONS=(!docs/' "$MAKEPKG_CONF"
 sed -i 's/^OPTIONS=(strip/OPTIONS=(!strip/' "$MAKEPKG_CONF"
 sed -i 's/!debug/debug/g' "$MAKEPKG_CONF"
-# Enable parallel compilation
-sed -i "s/#MAKEFLAGS=\"-j2\"/MAKEFLAGS=\"-j$(nproc)\"/" "$MAKEPKG_CONF"
-
-echo "::endgroup::"
-
-# 5. Execute Build
-echo "::group::[Build] Target: $PKG_PATH"
-
-if [[ ! -d "$PKG_PATH" ]]; then
-  echo "Error: Directory $PKG_PATH does not exist."
-  exit 1
-fi
-
-cd "$PKG_PATH"
-
-# Give builder ownership of the build directory
-chown -R builder:builder .
-
-# Switch to builder and build
-# We export PATH to ensure God GCC is picked up
-echo ">> Starting makepkg..."
-sudo -u builder PATH="$PATH" makepkg -s --noconfirm --skippgpcheck --noprogressbar
-
-# 6. Harvest Artifacts
-echo ">> Harvesting artifacts..."
-find . -maxdepth 1 -name "*.pkg.tar.zst" -exec cp -v {} "$ARTIFACT_DIR/" \;
-find . -maxdepth 1 -name "*.pkg.tar.zst.sig" -exec cp -v {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
-
-# Verify we got something
-count=$(ls -1 "$ARTIFACT_DIR"/*.pkg.tar.zst 2>/dev/null | wc -l)
-if [[ "$count" -eq 0 ]]; then
-  echo "Error: No packages built."
-  exit 1
-fi
-
-echo ">> Successfully built $count packages."
-echo "::endgroup::"
+sed -i "s/#MAKEFLAGS=\"-j2\"/MAKEFLAGS=\"-j$(nproc)\"/
