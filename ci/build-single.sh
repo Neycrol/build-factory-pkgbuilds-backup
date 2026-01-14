@@ -53,9 +53,10 @@ if [[ -n "$GOD_GCC_URL" ]]; then
     download_ok=1
   else
     echo "Direct download failed. Attempting GitHub API resolution..."
-    # Python fallback for GH API (simplified from original)
+    # Python fallback for GH API
     if [[ -n "$GOD_GCC_TOKEN" ]] && [[ "$GOD_GCC_URL" == https://github.com/*/releases/download/* ]]; then
-       python -c "
+       # We use a heredoc for python code to avoid quoting hell
+       cat <<EOF > resolve_asset.py
 import sys, json, urllib.request
 try:
     url = '$GOD_GCC_URL'
@@ -75,7 +76,9 @@ try:
 except Exception as e:
     sys.stderr.write(str(e))
     sys.exit(1)
-" > asset_url.txt || true
+EOF
+       python3 resolve_asset.py > asset_url.txt || true
+       rm -f resolve_asset.py
        
        asset_url=$(cat asset_url.txt)
        if [[ -n "$asset_url" ]]; then
@@ -108,7 +111,8 @@ fi
 MAKEPKG_CONF="/etc/makepkg.conf"
 # Optimization flags (User's preference)
 sed -i 's/^OPTIONS=(docs/OPTIONS=(!docs/' "$MAKEPKG_CONF"
-sed -i 's/^OPTIONS=(strip/OPTIONS=(!strip/' "$MAKEPKG_CONF" # God mode often disables strip
-sed -i 's/!debug/debug/g' "$MAKEPKG_CONF" # Or !debug, logic in original was complex. Defaulting to standard.
-# Enable parallel compilation
+sed -i 's/^OPTIONS=(strip/OPTIONS=(!strip/' "$MAKEPKG_CONF"
+sed -i 's/!debug/debug/g' "$MAKEPKG_CONF"
+# Enable parallel compilation - use single quotes for outer sed to be safe, but we need variable expansion.
+# Safer approach:
 sed -i "s/#MAKEFLAGS=\"-j2\"/MAKEFLAGS=\"-j$(nproc)\"/
