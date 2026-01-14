@@ -5,66 +5,93 @@ on:
     - cron: "0 */2 * * *"
   workflow_dispatch:
 
+env:
+  GOD_GCC_URL: https://github.com/Neycrol/build-factory-pkgbuilds-backup/releases/download/gcc-git-god-16/gcc-git-god-16.0.0.r20251220-1-x86_64.pkg.tar.zst
+  GOD_GCC_TOKEN: ${{ github.token }}
+  BINREPO_TOKEN: ${{ secrets.BINREPO_TOKEN }}
+  PUSH_EACH: "1"
+  REPO_NAME: buildfactory
+  RELEASE_TAG: buildfactory
+
 jobs:
-  # Phase 1: Tactical Planning
-  plan:
+  # Phase 1: Tier 1 - Independent Packages
+  plan-tier1:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
-      - name: Generate Attack Plan
+      - name: Generate Tier 1 Matrix (Non-KDE)
         id: set-matrix
         run: |
           chmod +x ci/matrix.json.sh
-          echo "matrix=$(./ci/matrix.json.sh)" >> $GITHUB_OUTPUT
+          # Invert match: Get everything that does NOT match 'kde-bolt'
+          echo "matrix=$(./ci/matrix.json.sh 'kde-bolt' 1)" >> $GITHUB_OUTPUT
 
-  # Phase 2: Parallel Execution
-  execute:
-    needs: plan
+  build-tier1:
+    needs: plan-tier1
     runs-on: ubuntu-latest
+    if: ${{ needs.plan-tier1.outputs.matrix != '[]' && needs.plan-tier1.outputs.matrix != '' }}
     container:
       image: archlinux:base-devel
     strategy:
       fail-fast: false
       matrix:
-        package: ${{ fromJson(needs.plan.outputs.matrix) }}
-    env:
-      GOD_GCC_URL: https://github.com/Neycrol/build-factory-pkgbuilds-backup/releases/download/gcc-git-god-16/gcc-git-god-16.0.0.r20251220-1-x86_64.pkg.tar.zst
-      GOD_GCC_TOKEN: ${{ github.token }}
-      BINREPO_TOKEN: ${{ secrets.BINREPO_TOKEN }}
-      PUSH_EACH: "1"
-      REPO_NAME: buildfactory
-      RELEASE_TAG: buildfactory
+        package: ${{ fromJson(needs.plan-tier1.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
-      
       - name: Build ${{ matrix.package }}
         run: |
           chmod +x ci/build-single.sh
-          # Pass the package path from matrix
           ./ci/build-single.sh "${{ matrix.package }}"
-          
-      - name: Archive Artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: pkg-${{ strategy.job_index }}
+          name: pkg-t1-${{ strategy.job_index }}
           path: artifacts/*.pkg.tar.zst
-          retention-days: 1
-          if-no-files-found: error
-      
-      # Also archive signatures if they exist
-      - name: Archive Signatures
-        uses: actions/upload-artifact@v4
+          if-no-files-found: ignore
+
+  # Phase 2: Tier 2 - Dependent Packages (KDE)
+  # Runs sequentially (max-parallel: 1) to ensure order if necessary, 
+  # or we rely on the custom repo being updated by Tier 1.
+  plan-tier2:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate Tier 2 Matrix (KDE)
+        id: set-matrix
+        run: |
+          chmod +x ci/matrix.json.sh
+          # Match 'kde-bolt' only
+          echo "matrix=$(./ci/matrix.json.sh 'kde-bolt' 0)" >> $GITHUB_OUTPUT
+
+  build-tier2:
+    needs: [plan-tier2, build-tier1]
+    runs-on: ubuntu-latest
+    if: ${{ needs.plan-tier2.outputs.matrix != '[]' && needs.plan-tier2.outputs.matrix != '' }}
+    container:
+      image: archlinux:base-devel
+    strategy:
+      fail-fast: false
+      max-parallel: 1 # Sequential build to handle internal KDE dependencies safely
+      matrix:
+        package: ${{ fromJson(needs.plan-tier2.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ${{ matrix.package }}
+        run: |
+          chmod +x ci/build-single.sh
+          ./ci/build-single.sh "${{ matrix.package }}"
+      - uses: actions/upload-artifact@v4
         with:
-          name: sig-${{ strategy.job_index }}
-          path: artifacts/*.pkg.tar.zst.sig
-          retention-days: 1
+          name: pkg-t2-${{ strategy.job_index }}
+          path: artifacts/*.pkg.tar.zst
           if-no-files-found: ignore
 
   # Phase 3: Logistics & Supply (Safety Net & Final Sync)
   finalize:
-    needs: execute
+    needs: [build-tier1, build-tier2]
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel
@@ -85,16 +112,7 @@ jobs:
           pattern: pkg-*
           merge-multiple: true
           
-      - name: Download Signatures
-        uses: actions/download-artifact@v4
-        with:
-          path: all_artifacts
-          pattern: sig-*
-          merge-multiple: true
-          
       - name: Update Binary Repo
-        env:
-          BINREPO_TOKEN: ${{ secrets.BINREPO_TOKEN }}
         run: |
           chmod +x ci/publish.sh
           # The publish script expects the directory containing artifacts
