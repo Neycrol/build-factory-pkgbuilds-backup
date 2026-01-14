@@ -113,6 +113,40 @@ MAKEPKG_CONF="/etc/makepkg.conf"
 sed -i 's/^OPTIONS=(docs/OPTIONS=(!docs/' "$MAKEPKG_CONF"
 sed -i 's/^OPTIONS=(strip/OPTIONS=(!strip/' "$MAKEPKG_CONF"
 sed -i 's/!debug/debug/g' "$MAKEPKG_CONF"
-# Enable parallel compilation - use single quotes for outer sed to be safe, but we need variable expansion.
-# Safer approach:
-sed -i "s/#MAKEFLAGS=\"-j2\"/MAKEFLAGS=\"-j$(nproc)\"/
+# Enable parallel compilation
+sed -i "s/#MAKEFLAGS=\"-j2\"/MAKEFLAGS=\"-j$(nproc)\"/" "$MAKEPKG_CONF"
+
+echo "::endgroup::"
+
+# 5. Execute Build
+echo "::group::[Build] Target: $PKG_PATH"
+
+if [[ ! -d "$PKG_PATH" ]]; then
+  echo "Error: Directory $PKG_PATH does not exist."
+  exit 1
+fi
+
+cd "$PKG_PATH"
+
+# Give builder ownership of the build directory
+chown -R builder:builder .
+
+# Switch to builder and build
+# We export PATH to ensure God GCC is picked up
+echo ">> Starting makepkg..."
+sudo -u builder PATH="$PATH" makepkg -s --noconfirm --skippgpcheck --noprogressbar
+
+# 6. Harvest Artifacts
+echo ">> Harvesting artifacts..."
+find . -maxdepth 1 -name "*.pkg.tar.zst" -exec cp -v {} "$ARTIFACT_DIR/" \;
+find . -maxdepth 1 -name "*.pkg.tar.zst.sig" -exec cp -v {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+
+# Verify we got something
+count=$(ls -1 "$ARTIFACT_DIR"/*.pkg.tar.zst 2>/dev/null | wc -l)
+if [[ "$count" -eq 0 ]]; then
+  echo "Error: No packages built."
+  exit 1
+fi
+
+echo ">> Successfully built $count packages."
+echo "::endgroup::"
