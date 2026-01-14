@@ -1,0 +1,97 @@
+name: God Mode Matrix Build
+
+on:
+  schedule:
+    - cron: "0 */2 * * *"
+  workflow_dispatch:
+
+jobs:
+  # Phase 1: Tactical Planning
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate Attack Plan
+        id: set-matrix
+        run: |
+          chmod +x ci/matrix.json.sh
+          echo "matrix=$(./ci/matrix.json.sh)" >> $GITHUB_OUTPUT
+
+  # Phase 2: Parallel Execution
+  execute:
+    needs: plan
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJson(needs.plan.outputs.matrix) }}
+    env:
+      GOD_GCC_URL: https://github.com/Neycrol/build-factory-pkgbuilds-backup/releases/download/gcc-git-god-16/gcc-git-god-16.0.0.r20251220-1-x86_64.pkg.tar.zst
+      GOD_GCC_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build ${{ matrix.package }}
+        run: |
+          chmod +x ci/build-single.sh
+          # Pass the package path from matrix
+          ./ci/build-single.sh "${{ matrix.package }}"
+          
+      - name: Archive Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ strategy.job_index }}
+          path: artifacts/*.pkg.tar.zst
+          retention-days: 1
+          if-no-files-found: error
+      
+      # Also archive signatures if they exist
+      - name: Archive Signatures
+        uses: actions/upload-artifact@v4
+        with:
+          name: sig-${{ strategy.job_index }}
+          path: artifacts/*.pkg.tar.zst.sig
+          retention-days: 1
+          if-no-files-found: ignore
+
+  # Phase 3: Logistics & Supply
+  finalize:
+    needs: execute
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Logistics Tools
+        run: |
+          pacman-key --init
+          pacman-key --populate archlinux
+          pacman -Syu --noconfirm git python openssh
+          
+      - name: Download War Spoils
+        uses: actions/download-artifact@v4
+        with:
+          path: all_artifacts
+          pattern: pkg-*
+          merge-multiple: true
+          
+      - name: Download Signatures
+        uses: actions/download-artifact@v4
+        with:
+          path: all_artifacts
+          pattern: sig-*
+          merge-multiple: true
+          
+      - name: Update Binary Repo
+        env:
+          BINREPO_TOKEN: ${{ secrets.BINREPO_TOKEN }}
+        run: |
+          chmod +x ci/publish.sh
+          # The publish script expects the directory containing artifacts
+          ./ci/publish.sh "all_artifacts"
