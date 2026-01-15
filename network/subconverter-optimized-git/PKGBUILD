@@ -77,6 +77,10 @@ prepare() {
 }
 
 build() {
+    # Use system GCC (God Mode GCC has ABI incompatibility with system libs like yaml-cpp)
+    export CC=/usr/bin/gcc
+    export CXX=/usr/bin/g++
+
     # === 0. 定义终极稳健参数 ===
     # 1. 彻底关闭 Fortify (-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0)
     # 2. 依然保留映射以去除警告
