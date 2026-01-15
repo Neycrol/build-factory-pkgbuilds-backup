@@ -67,7 +67,8 @@ build() {
 
   # === 4. Stage 3: PGO Use + Fat LTO ===
   msg2 "🔥 Starting Stage 3: Extreme Compilation..."
-  llvm-profdata merge -output="$srcdir/fish.profdata" "$srcdir/pgo_data"
+  # Use system llvm-profdata (NDK version is too old for profile format v10)
+  /usr/bin/llvm-profdata merge -output="$srcdir/fish.profdata" "$srcdir/pgo_data"
 
   export RUSTFLAGS="-Cprofile-use=$srcdir/fish.profdata -Ctarget-cpu=native -Clto=fat -Ccodegen-units=1 -Cpanic=abort -Clink-arg=-Wl,--emit-relocs"
   rm -rf build-pgo
