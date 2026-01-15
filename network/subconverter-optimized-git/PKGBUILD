@@ -96,7 +96,7 @@ build() {
     cd "$srcdir/$_pkgname/third_party/quickjs"
     make clean >/dev/null 2>&1 || true
     sed -i "1iCFLAGS+=$map_flag -fPIC" Makefile
-    make libquickjs.a
+    make CC=/usr/bin/gcc libquickjs.a
     
     # === 2. 编译 Subconverter ===
     msg2 "Building Subconverter..."
