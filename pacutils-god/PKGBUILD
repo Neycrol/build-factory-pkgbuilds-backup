@@ -52,8 +52,29 @@ build() {
 
 package() {
   cd pacutils
-  make DESTDIR="$pkgdir" PREFIX=/usr install-bin install-lib
-  install -Dm644 COPYING "$pkgdir"/usr/share/licenses/"$pkgname"/COPYING
+  
+  # Manual install (skip doc to avoid pod2man dependency)
+  install -d "$pkgdir/usr/bin"
+  install -d "$pkgdir/usr/lib"
+  install -d "$pkgdir/usr/include/pacutils"
+  
+  # Binaries
+  for bin in src/pac{capability,check,conf,file,info,ini,lock,log,repairdb,repairfile,report,sift,sync,trans}; do
+    [[ -f "$bin" ]] && install -m755 "$bin" "$pkgdir/usr/bin/"
+  done
+  # Symlinks
+  ln -s pactrans "$pkgdir/usr/bin/pacinstall"
+  ln -s pactrans "$pkgdir/usr/bin/pacremove"
+  
+  # Library
+  install -m755 lib/libpacutils.so "$pkgdir/usr/lib/"
+  
+  # Headers
+  install -m644 lib/pacutils.h "$pkgdir/usr/include/"
+  install -m644 lib/pacutils/*.h "$pkgdir/usr/include/pacutils/"
+  
+  # License
+  install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
 }
 
 # vim: set ft=PKGBUILD et sw=2:
