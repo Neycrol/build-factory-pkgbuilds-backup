@@ -84,52 +84,54 @@ build() {
 
   cmake --build build-pgo
 
-  # === 5. Stage 4: BOLT 物理重排 (The Final Touch) ===
+  # === 5. Stage 4: BOLT 物理重排 (Instrumentation Mode - no perf needed) ===
   msg2 "⚡ Starting BOLT Optimization..."
 
-  # Skip BOLT in CI (no sudo/perf permissions)
-  if [[ ! -w /sys/kernel/debug ]] || ! command -v perf &>/dev/null; then
-    msg2 "Skipping BOLT (no perf permissions in CI)"
-    return 0
+  # 5.1 Create instrumented binary (no perf/sudo needed!)
+  msg2 "Creating BOLT instrumented binary..."
+  llvm-bolt build-pgo/fish -o fish.inst \
+    -instrument \
+    -instrumentation-file="$srcdir/bolt_data/fish.fdata" \
+    -instrumentation-file-append-pid || {
+      msg2 "BOLT instrumentation failed, skipping BOLT"
+      return 0
+    }
+
+  # 5.2 Run instrumented binary with training workload
+  msg2 "Training BOLT instrumented binary..."
+  ./fish.inst --no-config -c 'echo "BOLT training"' 2>/dev/null || true
+  ./fish.inst --no-config -c 'for i in (seq 1 100); echo $i >/dev/null; end' 2>/dev/null || true
+  ./fish.inst --no-config -c 'string match -r ".*" "hello world"' 2>/dev/null || true
+  ./fish.inst --no-config -c 'math "1+1"' 2>/dev/null || true
+  ./fish.inst --no-config train.fish 2>/dev/null || true
+  
+  # Merge profile data if multiple files exist
+  if ls "$srcdir/bolt_data"/fish.fdata.* &>/dev/null; then
+    merge-fdata "$srcdir/bolt_data"/fish.fdata.* > "$srcdir/bolt_data/fish.fdata.merged"
+    mv "$srcdir/bolt_data/fish.fdata.merged" "$srcdir/bolt_data/fish.fdata"
   fi
 
-  # 5.1 录制 BOLT 数据
-  # 我们用刚才编好的 fish 再跑一遍训练脚本，这次用 perf 录
-  # 注意：这里需要 sudo 权限，makepkg 环境下可能需要无密码 sudo，或者手动执行
-  # 如果这里报错，可以注释掉 BOLT 部分，只用 PGO+LTO 也很强了
-
-  # 假设你有 sudo 权限 (或者在 fakeroot 外面跑)
-  # 这里为了脚本自动化，我们假设用户环境允许 perf
-
-  # 复制一份出来录制
-  cp build-pgo/fish fish.orig
-
-  # 启动录制 (后台)
-  # -F pid: 只记录 fish 的 PID 没法提前知道，所以我们用 -c (命令) 模式
-  # 录制 20 秒足够了
-  sudo perf record -e cycles:u -j any,u -o "$srcdir/bolt_data/fish.data" -- \
-    ./fish.orig --no-config train.fish > /dev/null 2>&1
-
-  # 5.2 转换与优化
-  # 将 perf 数据转为 BOLT 格式
-  sudo perf2bolt ./fish.orig -p "$srcdir/bolt_data/fish.data" -o "$srcdir/bolt_data/fish.fdata" --ignore-build-id
-
-  # 执行 BOLT
-  # -reorder-blocks=ext-tsp: 核心算法
-  # -reorder-functions=hfsort: 用户态可以开！
-  # -split-functions: 用户态可以开！
-  # -icf=1: 代码折叠
-  sudo llvm-bolt ./fish.orig -o ./fish.bolt \
-    -data "$srcdir/bolt_data/fish.fdata" \
-    -reorder-blocks=ext-tsp \
-    -reorder-functions=hfsort \
-    -split-functions \
-    -split-all-cold \
-    -icf=1 \
-    -dyno-stats
-
-  # 5.3 替换
-  mv ./fish.bolt build-pgo/fish
+  # 5.3 Optimize with BOLT
+  if [[ -s "$srcdir/bolt_data/fish.fdata" ]]; then
+    msg2 "Applying BOLT optimizations..."
+    llvm-bolt build-pgo/fish -o fish.bolt \
+      -data="$srcdir/bolt_data/fish.fdata" \
+      -reorder-blocks=ext-tsp \
+      -reorder-functions=hfsort \
+      -split-functions \
+      -split-all-cold \
+      -icf=1 \
+      -dyno-stats || true
+    
+    if [[ -f fish.bolt ]]; then
+      mv fish.bolt build-pgo/fish
+      msg2 "✅ BOLT optimization complete!"
+    else
+      msg2 "⚠️ BOLT optimization failed, using PGO binary"
+    fi
+  else
+    msg2 "⚠️ No BOLT profile data generated, skipping optimization"
+  fi
 }
 
 package() {
