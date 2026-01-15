@@ -42,7 +42,7 @@ build() {
   cmake -B build-pgo -S fish-shell -G Ninja \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DCMAKE_BUILD_TYPE=Release \
-    -DWITH_GETTEXT=OFF
+    -DWITH_MESSAGE_LOCALIZATION=OFF
 
   cmake --build build-pgo
 
@@ -80,7 +80,7 @@ build() {
   cmake -B build-pgo -S fish-shell -G Ninja \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DCMAKE_BUILD_TYPE=Release \
-    -DWITH_GETTEXT=OFF
+    -DWITH_MESSAGE_LOCALIZATION=OFF
 
   cmake --build build-pgo
 
