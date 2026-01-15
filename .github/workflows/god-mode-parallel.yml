@@ -44,7 +44,7 @@ jobs:
           ./ci/build-single.sh "${{ matrix.package }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: pkg-t1-${{ hashFiles(matrix.package) }}
+          name: pkg-t1-${{ strategy.job-index }}-${{ github.run_id }}
           path: artifacts/*.pkg.tar.zst
           if-no-files-found: ignore
 
@@ -79,7 +79,7 @@ jobs:
           ./ci/build-single.sh "${{ matrix.package }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: pkg-t2-${{ hashFiles(matrix.package) }}
+          name: pkg-t2-${{ strategy.job-index }}-${{ github.run_id }}
           path: artifacts/*.pkg.tar.zst
           if-no-files-found: ignore
 
