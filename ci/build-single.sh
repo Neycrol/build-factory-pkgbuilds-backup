@@ -123,6 +123,27 @@ if [[ ! -d "$PKG_PATH" ]]; then
   exit 1
 fi
 
+# Check if package already exists in Releases (skip rebuild)
+SKIP_IF_EXISTS="${SKIP_IF_EXISTS:-0}"
+if [[ "$SKIP_IF_EXISTS" == "1" && -n "${BINREPO_TOKEN:-}" ]]; then
+  cd "$PKG_PATH"
+  PKG_NAME=$(grep -m1 "^pkgname=" PKGBUILD | cut -d= -f2 | tr -d "'" | tr -d '"')
+  cd "$ROOT_DIR"
+  
+  echo ">> Checking if $PKG_NAME exists in Releases..."
+  EXISTING=$(curl -sL -H "Authorization: token $BINREPO_TOKEN" \
+    "https://api.github.com/repos/Neycrol/misaka-treasure-chest/releases/tags/${RELEASE_TAG}" \
+    | jq -r ".assets[].name // empty" | grep "^${PKG_NAME}-" | head -1 || true)
+  
+  if [[ -n "$EXISTING" ]]; then
+    echo ">> ⏭️ Package $PKG_NAME already exists ($EXISTING), skipping build."
+    echo "::endgroup::"
+    exit 0
+  fi
+fi
+
+cd "$PKG_PATH"
+
 cd "$PKG_PATH"
 
 # Replace march=native in PKGBUILD for CI (target: alderlake)

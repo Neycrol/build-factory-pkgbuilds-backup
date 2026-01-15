@@ -76,6 +76,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build ${{ matrix.package }}
+        env:
+          SKIP_IF_EXISTS: "1"
         run: |
           chmod +x ci/build-single.sh
           ./ci/build-single.sh "${{ matrix.package }}"
@@ -112,6 +114,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build ${{ matrix.package }}
+        env:
+          SKIP_IF_EXISTS: "1"
         run: |
           chmod +x ci/build-single.sh
           ./ci/build-single.sh "${{ matrix.package }}"
