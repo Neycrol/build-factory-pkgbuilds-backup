@@ -40,25 +40,15 @@ pkgver() {
 }
 
 build() {
-  # --- MISAKA GOD MODE INJECTION ---
-  msg2 "Injecting God Mode Compiler and Flags..."
-  export CC="/opt/gcc-git-god/bin/gcc"
-  export CXX="/opt/gcc-git-god/bin/g++"
-  
-  export GOD_FLAGS="-O3 -march=native -flto=auto -fgraphite-identity -floop-nest-optimize -pipe -fno-semantic-interposition"
-  # BOLT requires --emit-relocs
-  export GOD_LDFLAGS="-L/opt/gcc-git-god/lib64 -Wl,-rpath,/opt/gcc-git-god/lib64 -flto=auto -Wl,--emit-relocs "
-
-  export CFLAGS="$GOD_FLAGS"
-  export CXXFLAGS="$GOD_FLAGS"
-  export LDFLAGS="$GOD_LDFLAGS"
-  export LD_LIBRARY_PATH="/opt/gcc-git-god/lib64:$LD_LIBRARY_PATH"
-  # --- END INJECTION ---
+  # Use system compiler (God Mode GCC has ICU linking issues)
+  export CFLAGS="-O3 -march=alderlake -mtune=alderlake -flto=auto -pipe"
+  export CXXFLAGS="$CFLAGS"
+  export LDFLAGS="-flto=auto"
 
   mkdir -p pacman/build
   cd pacman/build
 
-  meson setup --prefix=/usr -Dc_link_args='-lstdc++' \
+  meson setup --prefix=/usr \
         --buildtype=plain \
         -Ddoc=enabled \
         -Ddoxygen=enabled \
