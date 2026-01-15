@@ -1,0 +1,13 @@
+[Unit]
+Description=Subconverter - Subscription Converter
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/usr/share/subconverter
+ExecStart=/usr/bin/subconverter
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

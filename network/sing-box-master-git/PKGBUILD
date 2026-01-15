@@ -9,8 +9,9 @@ url="https://sing-box.sagernet.org/"
 license=('GPL-3.0-only')
 groups=('sing-box-suite') # 记得加上组名
 
-depends=('glibc' 'jq' 'subconverter' 'fzf') # 加上 fzf 依赖
+depends=('glibc')
 makedepends=('git' 'go')
+optdepends=('jq: for config manipulation' 'subconverter: for subscription conversion' 'fzf: for interactive selection')
 provides=('sing-box')
 conflicts=('sing-box' 'sing-box-bin' 'sing-box-git')
 backup=('etc/sing-box/config_template.json')
