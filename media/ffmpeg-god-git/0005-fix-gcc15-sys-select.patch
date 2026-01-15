@@ -5,11 +5,12 @@ GCC 15 no longer implicitly includes sys/select.h from other headers.
 
 --- a/libavformat/tls_gnutls.c
 +++ b/libavformat/tls_gnutls.c
-@@ -24,6 +24,7 @@
- #include <gnutls/gnutls.h>
- #include <gnutls/x509.h>
+@@ -20,6 +20,8 @@
+ 
+ #include <errno.h>
  
 +#include <sys/select.h>
- #include "avformat.h"
- #include "internal.h"
- #include "network.h"
++
+ #include <gnutls/gnutls.h>
+ #include <gnutls/dtls.h>
+ #include <gnutls/x509.h>
