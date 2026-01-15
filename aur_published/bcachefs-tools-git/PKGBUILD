@@ -56,27 +56,10 @@ pkgver() {
 
 prepare() {
     cd "$_pkgname"
-    # Reset any previous patches to ensure a clean state
     git reset --hard
     
     export RUSTUP_TOOLCHAIN=stable
     cargo fetch --locked --target "$CARCH-unknown-linux-gnu"
-
-    # --- FIX: Header inclusion order (Robust) ---
-    # Move asm/types.h to the top to satisfy __u64 dependency in openat2.h (via fcntl.h)
-    msg2 "Patching include/linux/types.h inclusion order..."
-    
-    # 1. Insert the block at the top (after #define _TOOLS_LINUX_TYPES_H_)
-    sed -i '/#define _TOOLS_LINUX_TYPES_H_/a \
-\
-#ifndef __SANE_USERSPACE_TYPES__\
-#define __SANE_USERSPACE_TYPES__        /* For PPC64, to get LL64 types */\
-#endif\
-#include <asm/types.h>' include/linux/types.h
-
-    # 2. Remove the original block (lines 13-16 in upstream)
-    # We match the specific context to be safe
-    sed -i '/#include <linux\/posix_types.h>/,+5 { /__SANE_USERSPACE_TYPES__/d; /#define __SANE_USERSPACE_TYPES__/d; /#endif/d; /#include <asm\/types.h>/d; }' include/linux/types.h
 }
 
 build() {
