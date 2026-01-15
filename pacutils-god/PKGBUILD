@@ -12,7 +12,7 @@ depends=(
   'libarchive'
   'pacman'
 )
-makedepends=('git')
+makedepends=('git' 'perl')
 checkdepends=('perl')
 source=(
   "git+https://github.com/andrewgregory/pacutils.git"

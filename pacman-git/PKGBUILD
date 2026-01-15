@@ -43,7 +43,6 @@ build() {
   # --- MISAKA GOD MODE INJECTION ---
   msg2 "Injecting God Mode Compiler and Flags..."
   export CC="/opt/gcc-git-god/bin/gcc"
-  export CC_LD="/opt/gcc-git-god/bin/g++"
   export CXX="/opt/gcc-git-god/bin/g++"
   
   export GOD_FLAGS="-O3 -march=native -flto=auto -fgraphite-identity -floop-nest-optimize -pipe -fno-semantic-interposition"
@@ -59,7 +58,7 @@ build() {
   mkdir -p pacman/build
   cd pacman/build
 
-  meson --prefix=/usr \
+  meson setup --prefix=/usr -Dc_link_args='-lstdc++' \
         --buildtype=plain \
         -Ddoc=enabled \
         -Ddoxygen=enabled \
