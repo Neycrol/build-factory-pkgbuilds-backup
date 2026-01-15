@@ -133,10 +133,7 @@ if [[ "$PKG_PATH" == *"ffmpeg"* ]]; then
   echo ">> Applying ffmpeg -Wno-error hotfix..."
   export CFLAGS="${CFLAGS:-} -Wno-error"
   export CXXFLAGS="${CXXFLAGS:-} -Wno-error"
-  # Also attempt to patch PKGBUILD if it has configure line
-  if grep -q "./configure" PKGBUILD; then
-     sed -i 's|./configure|./configure --disable-werror|' PKGBUILD
-  fi
+fi
 fi
 
 # HOTFIX: Dependency handling
