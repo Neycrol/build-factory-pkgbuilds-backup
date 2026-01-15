@@ -229,7 +229,7 @@ if [[ "$PUSH_EACH" == "1" ]]; then
         break
       fi
       
-      git commit -m "Update ${PKG_PATH} $(date -u +%Y-%m-%d %H:%M:%S)"
+      git commit -m "Update ${PKG_PATH} $(date -u '+%Y-%m-%d %H:%M:%S')"
       
       # Push
       if git push origin main; then
