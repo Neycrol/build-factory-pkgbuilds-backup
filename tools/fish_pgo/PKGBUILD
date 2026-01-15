@@ -7,7 +7,7 @@ arch=(x86_64)
 url="https://fishshell.com"
 license=(GPL2)
 depends=(glibc gcc-libs ncurses pcre2)
-makedepends=(git cmake ninja unzip clang llvm lld rust) # uses Android NDK for llvm-bolt
+makedepends=(git cmake ninja unzip clang llvm lld rust)
 provides=(fish)
 conflicts=(fish fish-git)
 source=("git+https://github.com/fish-shell/fish-shell.git")
@@ -19,7 +19,6 @@ pkgver() {
 }
 
 prepare() {
-  # 准备 BOLT 数据目录
   mkdir -p "$srcdir/bolt_data"
 }
 
@@ -34,118 +33,96 @@ build() {
     curl -L "$NDK_URL" -o "$srcdir/ndk.zip"
     unzip -q "$srcdir/ndk.zip" -d "$srcdir"
     rm "$srcdir/ndk.zip"
+  fi
   
   NDK_LLVM="$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64"
   export PATH="$NDK_LLVM/bin:$PATH"
   msg2 "✅ NDK LLVM tools ready: $(llvm-bolt --version 2>&1 | head -1 || echo 'not found')"
 
-  # === 1. 环境准备 (使用系统工具) ===
+  # === 1. 环境准备 ===
   export CC=clang
   export CXX=clang++
-  # 强制使用 LLD 链接器 (支持 BOLT 所需的重定位)
   export LDFLAGS="-fuse-ld=lld"
 
   # === 2. Stage 1: PGO 插桩编译 ===
   msg2 "🚀 Starting PGO Stage 1: Instrumentation..."
   rm -rf build-pgo
-
-  # RUSTFLAGS 注入：
-  # -Cprofile-generate: 插桩
-  # -Ctarget-cpu=native: 物理特化
   export RUSTFLAGS="-Cprofile-generate=$srcdir/pgo_data -Ctarget-cpu=native"
 
   cmake -B build-pgo -S fish-shell -G Ninja \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DCMAKE_BUILD_TYPE=Release \
     -DWITH_MESSAGE_LOCALIZATION=OFF
-
   cmake --build build-pgo
 
-  # === 3. Stage 2: 特训 (PGO Training) ===
-  msg2 "🏋️‍♂️ Training Fish (PGO)..."
-
+  # === 3. Stage 2: PGO Training ===
+  msg2 "🏋️ Training Fish (PGO)..."
   export LLVM_PROFILE_FILE="$srcdir/pgo_data/fish-%p-%m.profraw"
-
-  # 模拟高强度使用
   echo 'for i in (seq 1 5000); string match -r ".*" "test_$i" >/dev/null; end' > train.fish
 
   for i in {1..20}; do
-    ./build-pgo/fish --no-config train.fish > /dev/null 2>&1
-    ./build-pgo/fish --no-config -c "complete -C 'git comm'" > /dev/null 2>&1
-    ./build-pgo/fish --no-config -c "exit" > /dev/null 2>&1
+    ./build-pgo/fish --no-config train.fish > /dev/null 2>&1 || true
+    ./build-pgo/fish --no-config -c "complete -C 'git comm'" > /dev/null 2>&1 || true
   done
 
-  # === 4. Stage 3: 极限参数编译 (PGO Use + Fat LTO + Codegen=1) ===
+  # === 4. Stage 3: PGO Use + Fat LTO ===
   msg2 "🔥 Starting Stage 3: Extreme Compilation..."
-
-  # 合并 PGO 数据
   llvm-profdata merge -output="$srcdir/fish.profdata" "$srcdir/pgo_data"
 
-  # 终极 Rust 参数：
-  # -Cprofile-use: 注入 PGO 数据
-  # -Clto=fat: 全局胖 LTO (极致优化)
-  # -Ccodegen-units=1: 单线程代码生成 (极致优化)
-  # -Cpanic=abort: 去除回溯 (极致精简)
-  # -Clink-arg=-Wl,--emit-relocs: 保留重定位信息 (为 BOLT 做准备)
   export RUSTFLAGS="-Cprofile-use=$srcdir/fish.profdata -Ctarget-cpu=native -Clto=fat -Ccodegen-units=1 -Cpanic=abort -Clink-arg=-Wl,--emit-relocs"
-
-  # 清除旧构建
   rm -rf build-pgo
 
   cmake -B build-pgo -S fish-shell -G Ninja \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DCMAKE_BUILD_TYPE=Release \
     -DWITH_MESSAGE_LOCALIZATION=OFF
-
   cmake --build build-pgo
 
-  # === 5. Stage 4: BOLT 物理重排 (Instrumentation Mode - no perf needed) ===
+  # === 5. Stage 4: BOLT Optimization ===
   msg2 "⚡ Starting BOLT Optimization..."
 
-
-  # 5.1 Create instrumented binary (no perf/sudo needed!)
+  # Create instrumented binary
   msg2 "Creating BOLT instrumented binary..."
-  llvm-bolt build-pgo/fish -o fish.inst \
+  if ! llvm-bolt build-pgo/fish -o fish.inst \
     -instrument \
     -instrumentation-file="$srcdir/bolt_data/fish.fdata" \
-    -instrumentation-file-append-pid || {
-      msg2 "BOLT instrumentation failed, skipping BOLT"
-      return 0
-    }
+    -instrumentation-file-append-pid; then
+    msg2 "⚠️ BOLT instrumentation failed, skipping BOLT"
+    return 0
+  fi
 
-  # 5.2 Run instrumented binary with training workload
+  # Run training
   msg2 "Training BOLT instrumented binary..."
   ./fish.inst --no-config -c 'echo "BOLT training"' 2>/dev/null || true
   ./fish.inst --no-config -c 'for i in (seq 1 100); echo $i >/dev/null; end' 2>/dev/null || true
   ./fish.inst --no-config -c 'string match -r ".*" "hello world"' 2>/dev/null || true
-  ./fish.inst --no-config -c 'math "1+1"' 2>/dev/null || true
   ./fish.inst --no-config train.fish 2>/dev/null || true
   
-  # Merge profile data if multiple files exist
+  # Merge profile data
   if ls "$srcdir/bolt_data"/fish.fdata.* &>/dev/null; then
     merge-fdata "$srcdir/bolt_data"/fish.fdata.* > "$srcdir/bolt_data/fish.fdata.merged"
     mv "$srcdir/bolt_data/fish.fdata.merged" "$srcdir/bolt_data/fish.fdata"
+  fi
 
-  # 5.3 Optimize with BOLT
+  # Apply BOLT
   if [[ -s "$srcdir/bolt_data/fish.fdata" ]]; then
     msg2 "Applying BOLT optimizations..."
-    llvm-build-pgo/fish -o fish.\
+    if llvm-bolt build-pgo/fish -o fish.bolt \
       -data="$srcdir/bolt_data/fish.fdata" \
       -reorder-blocks=ext-tsp \
       -reorder-functions=hfsort \
       -split-functions \
       -split-all-cold \
       -icf=1 \
-      -dyno-stats || true
-    
-    if [[ -f fish.bolt ]]; then
+      -dyno-stats; then
       mv fish.bolt build-pgo/fish
       msg2 "✅ BOLT optimization complete!"
     else
       msg2 "⚠️ BOLT optimization failed, using PGO binary"
     fi
   else
-    msg2 "⚠️ No BOLT profile data generated, skipping optimization"
+    msg2 "⚠️ No BOLT profile data, skipping"
+  fi
 }
 
 package() {
