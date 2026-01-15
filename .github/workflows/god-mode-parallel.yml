@@ -14,17 +14,18 @@ env:
   RELEASE_TAG: buildfactory
 
 jobs:
+  # Tier 1: Independent packages (parallel)
   plan-tier1:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
-      - name: Generate Tier 1 Matrix (Non-KDE)
+      - name: Generate Tier 1 Matrix
         id: set-matrix
         run: |
           chmod +x ci/matrix.json.sh
-          echo "matrix=$(./ci/matrix.json.sh 'kde-bolt' 1)" >> $GITHUB_OUTPUT
+          echo "matrix=$(./ci/matrix.json.sh 'network/|kde-bolt/' 1)" >> $GITHUB_OUTPUT
 
   build-tier1:
     needs: plan-tier1
@@ -48,17 +49,18 @@ jobs:
           path: artifacts/*.pkg.tar.zst
           if-no-files-found: ignore
 
+  # Tier 2: Network packages (sequential, depends on Tier 1)
   plan-tier2:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
-      - name: Generate Tier 2 Matrix (KDE)
+      - name: Generate Tier 2 Matrix
         id: set-matrix
         run: |
           chmod +x ci/matrix.json.sh
-          echo "matrix=$(./ci/matrix.json.sh 'kde-bolt' 0)" >> $GITHUB_OUTPUT
+          echo "matrix=$(./ci/matrix.json.sh 'network/' 0)" >> $GITHUB_OUTPUT
 
   build-tier2:
     needs: [plan-tier2, build-tier1]
@@ -83,8 +85,44 @@ jobs:
           path: artifacts/*.pkg.tar.zst
           if-no-files-found: ignore
 
+  # Tier 3: KDE packages (sequential, depends on Tier 2)
+  plan-tier3:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate Tier 3 Matrix
+        id: set-matrix
+        run: |
+          chmod +x ci/matrix.json.sh
+          echo "matrix=$(./ci/matrix.json.sh 'kde-bolt/' 0)" >> $GITHUB_OUTPUT
+
+  build-tier3:
+    needs: [plan-tier3, build-tier2]
+    runs-on: ubuntu-latest
+    if: ${{ needs.plan-tier3.outputs.matrix != '[]' && needs.plan-tier3.outputs.matrix != '' }}
+    container:
+      image: archlinux:base-devel
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        package: ${{ fromJson(needs.plan-tier3.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ${{ matrix.package }}
+        run: |
+          chmod +x ci/build-single.sh
+          ./ci/build-single.sh "${{ matrix.package }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-t3-${{ strategy.job-index }}-${{ github.run_id }}
+          path: artifacts/*.pkg.tar.zst
+          if-no-files-found: ignore
+
   finalize:
-    needs: [build-tier1, build-tier2]
+    needs: [build-tier1, build-tier2, build-tier3]
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel

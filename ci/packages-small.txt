@@ -1,4 +1,4 @@
-# Small packages built on GitHub Actions
+# Tier 1: Independent packages
 android/scrcpy-git
 aur_published/bcachefs-kernel-dkms-git
 aur_published/bcachefs-tools-git
@@ -7,16 +7,6 @@ cmake-git
 media/ffmpeg-god-git
 game/prismlauncher-fix
 glibc-god
-kde-bolt/konsole-git
-kde-bolt/protocols
-kde-bolt/libkscreen
-kde-bolt/kscreen
-kde-bolt/kwin
-kde-bolt/libplasma
-kde-bolt/plasma-workspace
-network/clash2singbox-git
-network/sing-box-master-git
-network/subconverter-optimized-git
 pacman-contrib-god
 pacman-git
 pacman-git/icu-god
@@ -25,3 +15,17 @@ paru
 tools/codex-git
 tools/cursor-agent-bin
 tools/fish_pgo
+
+# Tier 2: Network packages (dependency chain)
+network/subconverter-optimized-git
+network/clash2singbox-git
+network/sing-box-master-git
+
+# Tier 3: KDE packages
+kde-bolt/konsole-git
+kde-bolt/protocols
+kde-bolt/libkscreen
+kde-bolt/kscreen
+kde-bolt/kwin
+kde-bolt/libplasma
+kde-bolt/plasma-workspace
