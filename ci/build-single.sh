@@ -166,6 +166,11 @@ echo ">> Harvesting artifacts..."
 find . -maxdepth 1 -name "*.pkg.tar.zst" -exec cp -v {} "$ARTIFACT_DIR/" \;
 find . -maxdepth 1 -name "*.pkg.tar.zst.sig" -exec cp -v {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
 
+# Rename files with colons (epoch) for Windows compatibility
+for f in "$ARTIFACT_DIR"/*:*; do
+  [[ -e "$f" ]] && mv -v "$f" "${f//:/_}"
+done
+
 count=$(ls -1 "$ARTIFACT_DIR"/*.pkg.tar.zst 2>/dev/null | wc -l)
 if [[ "$count" -eq 0 ]]; then
   echo "Error: No packages built."
