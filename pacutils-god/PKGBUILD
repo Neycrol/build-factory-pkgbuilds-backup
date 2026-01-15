@@ -52,7 +52,7 @@ build() {
 
 package() {
   cd pacutils
-  make DESTDIR="$pkgdir" PREFIX=/usr install
+  make DESTDIR="$pkgdir" PREFIX=/usr install-bin install-lib
   install -Dm644 COPYING "$pkgdir"/usr/share/licenses/"$pkgname"/COPYING
 }
 
