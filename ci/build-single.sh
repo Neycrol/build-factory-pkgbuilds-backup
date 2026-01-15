@@ -111,7 +111,7 @@ sed -i 's/^OPTIONS=(strip/OPTIONS=(!strip/' "$MAKEPKG_CONF"
 sed -i 's/!debug/debug/g' "$MAKEPKG_CONF"
 sed -i "s/#MAKEFLAGS=\\\"-j2\\\"/MAKEFLAGS=\\\"-j$(nproc)\\\"/" "$MAKEPKG_CONF"
 # Replace march=native with alderlake for CI
-sed -i "s/-march=native/-march=alderlake/g" "$MAKEPKG_CONF"
+sed -i "s/-march=native/-march=alderlake/g; s/-mtune=native/-mtune=alderlake/g" "$MAKEPKG_CONF"
 
 echo "::endgroup::"
 
@@ -128,7 +128,7 @@ cd "$PKG_PATH"
 # Replace march=native in PKGBUILD for CI (target: alderlake)
 if grep -q "march=native" PKGBUILD 2>/dev/null; then
   echo ">> Replacing march=native with march=alderlake in PKGBUILD..."
-  sed -i "s/-march=native/-march=alderlake/g" PKGBUILD
+  sed -i "s/-march=native/-march=alderlake/g; s/-mtune=native/-mtune=alderlake/g" PKGBUILD
 fi
 chown -R builder:builder .
 
