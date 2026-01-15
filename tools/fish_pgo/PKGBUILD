@@ -87,6 +87,12 @@ build() {
   # === 5. Stage 4: BOLT 物理重排 (The Final Touch) ===
   msg2 "⚡ Starting BOLT Optimization..."
 
+  # Skip BOLT in CI (no sudo/perf permissions)
+  if [[ ! -w /sys/kernel/debug ]] || ! command -v perf &>/dev/null; then
+    msg2 "Skipping BOLT (no perf permissions in CI)"
+    return 0
+  fi
+
   # 5.1 录制 BOLT 数据
   # 我们用刚才编好的 fish 再跑一遍训练脚本，这次用 perf 录
   # 注意：这里需要 sudo 权限，makepkg 环境下可能需要无密码 sudo，或者手动执行
