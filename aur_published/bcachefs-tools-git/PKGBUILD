@@ -3,11 +3,11 @@
 
 pkgname=bcachefs-tools-git
 _pkgname=bcachefs-tools
-pkgver=r2258.gc1a0cc6f
+pkgver=r2286.gea596d04
 pkgrel=1
 pkgdesc="Bcachefs userspace tools (Git version) with FUSE support enabled"
 arch=('x86_64')
-url="https://bcachefs.org/"
+url="https://github.com/koverstreet/bcachefs-tools"
 license=('GPL-2.0-only')
 provides=("$_pkgname")
 conflicts=("$_pkgname")
@@ -42,7 +42,16 @@ options=('!lto' '!debug')
 
 pkgver() {
     cd "$_pkgname"
-    printf "r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+    git remote set-url origin "https://github.com/koverstreet/bcachefs-tools.git"
+    local ref="HEAD"
+    if git fetch --quiet origin; then
+        if git rev-parse --verify -q origin/HEAD >/dev/null; then
+            ref="origin/HEAD"
+        elif git rev-parse --verify -q origin/master >/dev/null; then
+            ref="origin/master"
+        fi
+    fi
+    printf "r%s.g%s" "$(git rev-list --count "$ref")" "$(git rev-parse --short "$ref")"
 }
 
 prepare() {
@@ -76,7 +85,7 @@ build() {
     # Use system CFLAGS/LDFLAGS for Rust
     # Also strip build paths to avoid packaging warnings and reproducible build issues
     export RUSTFLAGS="-C link-arg=$LDFLAGS --remap-path-prefix=$srcdir/=/"
-    export CFLAGS="$CFLAGS -fdebug-prefix-map=$srcdir=/="
+    export CFLAGS="$CFLAGS -fdebug-prefix-map=$srcdir/=/"
 
     make \
         BCACHEFS_FUSE=1 \
