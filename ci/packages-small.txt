@@ -5,14 +5,12 @@ aur_published/bcachefs-tools-git
 aur_published/prismlauncher-zlib-compat-git
 cmake-git
 media/ffmpeg-god-git
-game/prismlauncher-fix
 glibc-god
 pacman-contrib-god
 pacman-git
 pacman-git/icu-god
 pacutils-god
 paru
-tools/codex-git
 tools/cursor-agent-bin
 tools/fish_pgo
 

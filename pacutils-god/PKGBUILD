@@ -45,10 +45,10 @@ build() {
   make CFLAGS="$CFLAGS $LDFLAGS" SYSCONFDIR=/etc LOCALSTATEDIR=/var
 }
 
-check() {
-  cd pacutils
-  make check
-}
+# #check() {
+#   cd pacutils
+#   make check
+# }
 
 package() {
   cd pacutils

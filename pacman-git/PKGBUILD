@@ -43,11 +43,12 @@ build() {
   # --- MISAKA GOD MODE INJECTION ---
   msg2 "Injecting God Mode Compiler and Flags..."
   export CC="/opt/gcc-git-god/bin/gcc"
+  export CC_LD="/opt/gcc-git-god/bin/g++"
   export CXX="/opt/gcc-git-god/bin/g++"
   
   export GOD_FLAGS="-O3 -march=native -flto=auto -fgraphite-identity -floop-nest-optimize -pipe -fno-semantic-interposition"
   # BOLT requires --emit-relocs
-  export GOD_LDFLAGS="-L/opt/gcc-git-god/lib64 -Wl,-rpath,/opt/gcc-git-god/lib64 -flto=auto -Wl,--emit-relocs -lstdc++"
+  export GOD_LDFLAGS="-L/opt/gcc-git-god/lib64 -Wl,-rpath,/opt/gcc-git-god/lib64 -flto=auto -Wl,--emit-relocs "
 
   export CFLAGS="$GOD_FLAGS"
   export CXXFLAGS="$GOD_FLAGS"
