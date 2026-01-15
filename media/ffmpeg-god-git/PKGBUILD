@@ -121,6 +121,7 @@ source=(
   0002-x86inc-extern-hidden.patch
   0003-keep-asm-tables-lto.patch
   0004-keep-fspp-dither-lto.patch
+  0005-fix-gcc15-sys-select.patch
   workload.sh
 )
 b2sums=(
