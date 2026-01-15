@@ -109,7 +109,7 @@ MAKEPKG_CONF="/etc/makepkg.conf"
 sed -i 's/^OPTIONS=(docs/OPTIONS=(!docs/' "$MAKEPKG_CONF"
 sed -i 's/^OPTIONS=(strip/OPTIONS=(!strip/' "$MAKEPKG_CONF"
 sed -i 's/!debug/debug/g' "$MAKEPKG_CONF"
-sed -i "s/#MAKEFLAGS=\"-j2\"/MAKEFLAGS=\"-j$(nproc)\"/
+sed -i "s/#MAKEFLAGS=\\\"-j2\\\"/MAKEFLAGS=\\\"-j$(nproc)\\\"/" "$MAKEPKG_CONF"
 
 echo "::endgroup::"
 
