@@ -138,8 +138,8 @@ build() {
       -icf=1 \
       -dyno-stats || true
     
-    if [[ -f fish.]]; then
-      mv fish.build-pgo/fish
+    if [[ -f fish.bolt ]]; then
+      mv fish.bolt build-pgo/fish
       msg2 "✅ BOLT optimization complete!"
     else
       msg2 "⚠️ BOLT optimization failed, using PGO binary"
