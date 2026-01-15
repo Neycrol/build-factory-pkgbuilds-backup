@@ -13,6 +13,7 @@ depends=(
   'pacman'
 )
 makedepends=('git')
+checkdepends=('perl')
 source=(
   "git+https://github.com/andrewgregory/pacutils.git"
   '0001-pacutils-pacman-7.1-compatibility.patch'
