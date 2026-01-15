@@ -135,7 +135,6 @@ if [[ "$PKG_PATH" == *"ffmpeg"* ]]; then
   export CXXFLAGS="${CXXFLAGS:-} -Wno-error"
 fi
 fi
-
 # HOTFIX: Dependency handling
 # If we suspect missing deps (Exit 8), we can try to install the god-mode binrepo FIRST
 # But wait, we need to know the repo URL.
