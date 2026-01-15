@@ -3,6 +3,7 @@ android/scrcpy-git
 aur_published/bcachefs-kernel-dkms-git
 aur_published/bcachefs-tools-git
 cmake-git
+aur_published/prismlauncher-zlib-compat-git
 media/ffmpeg-god-git
 glibc-god
 pacman-contrib-god
