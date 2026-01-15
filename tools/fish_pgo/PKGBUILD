@@ -7,7 +7,7 @@ arch=(x86_64)
 url="https://fishshell.com"
 license=(GPL2)
 depends=(glibc gcc-libs ncurses pcre2)
-makedepends=(git cmake ninja clang llvm lld rust) # llvm-bolt not in Arch repos, BOLT skipped in CI
+makedepends=(git cmake ninja unzip clang llvm lld rust) # uses Android NDK for llvm-bolt
 provides=(fish)
 conflicts=(fish fish-git)
 source=("git+https://github.com/fish-shell/fish-shell.git")
@@ -24,6 +24,21 @@ prepare() {
 }
 
 build() {
+  # === 0. Download Android NDK for LLVM tools (llvm-bolt, etc.) ===
+  NDK_VERSION="r27c"
+  NDK_URL="https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
+  NDK_DIR="$srcdir/android-ndk-${NDK_VERSION}"
+  
+  if [[ ! -d "$NDK_DIR" ]]; then
+    msg2 "📦 Downloading Android NDK ${NDK_VERSION}..."
+    curl -L "$NDK_URL" -o "$srcdir/ndk.zip"
+    unzip -q "$srcdir/ndk.zip" -d "$srcdir"
+    rm "$srcdir/ndk.zip"
+  
+  NDK_LLVM="$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64"
+  export PATH="$NDK_LLVM/bin:$PATH"
+  msg2 "✅ NDK LLVM tools ready: $(llvm-bolt --version 2>&1 | head -1 || echo 'not found')"
+
   # === 1. 环境准备 (使用系统工具) ===
   export CC=clang
   export CXX=clang++
@@ -87,11 +102,6 @@ build() {
   # === 5. Stage 4: BOLT 物理重排 (Instrumentation Mode - no perf needed) ===
   msg2 "⚡ Starting BOLT Optimization..."
 
-  # Check if llvm-bolt is available (not in standard Arch repos)
-  if ! command -v llvm-bolt &>/dev/null; then
-    msg2 "⚠️ llvm-bolt not found, skipping BOLT (PGO+LTO still applied)"
-    return 0
-  fi
 
   # 5.1 Create instrumented binary (no perf/sudo needed!)
   msg2 "Creating BOLT instrumented binary..."
@@ -115,7 +125,6 @@ build() {
   if ls "$srcdir/bolt_data"/fish.fdata.* &>/dev/null; then
     merge-fdata "$srcdir/bolt_data"/fish.fdata.* > "$srcdir/bolt_data/fish.fdata.merged"
     mv "$srcdir/bolt_data/fish.fdata.merged" "$srcdir/bolt_data/fish.fdata"
-  fi
 
   # 5.3 Optimize with BOLT
   if [[ -s "$srcdir/bolt_data/fish.fdata" ]]; then
@@ -137,7 +146,6 @@ build() {
     fi
   else
     msg2 "⚠️ No BOLT profile data generated, skipping optimization"
-  fi
 }
 
 package() {
