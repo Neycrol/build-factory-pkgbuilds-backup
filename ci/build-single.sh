@@ -153,7 +153,7 @@ cat <<PACMAN_REPO >> /etc/pacman.conf
 
 [buildfactory]
 SigLevel = Optional TrustAll
-Server = https://raw.githubusercontent.com/Neycrol/misaka-treasure-chest/main/repo
+Server = https://github.com/Neycrol/misaka-treasure-chest/releases/download/buildfactory
 PACMAN_REPO
 # Sync DB
 pacman -Sy || echo "Warning: Failed to sync custom repo."
