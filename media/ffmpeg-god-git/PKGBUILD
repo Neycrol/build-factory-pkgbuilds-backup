@@ -130,6 +130,7 @@ b2sums=(
         'b7de5e40af43eb66bf7b4f239fc49d89e688e8b80679067ed287f4b04138e48dfecf49f2048b0e61e1276aa8503d9e1c3ac29a6f76dc5221e0fce82c267aabea'
         '7d3c5332ee3f40bf00f8f55adcf15bea2724482ac2ca41fdc72f32332bc465e379a43a7f7fab5223a79117463f86d2e95f30324e0ed2d3da9aa5913327a20c04'
         'b033ebc796bd1efd3cc8e201f37080927a35e2d930bf8fab8738b31fc5d69a6c5231508fd1a5299131f3aee6b9ae94e8d5be531c455ff38fe1965a5d59ae5c98'
+        'SKIP'
 )
 
 pkgver() {
@@ -148,6 +149,9 @@ prepare() {
   git apply -3 ../0003-keep-asm-tables-lto.patch
 
   git apply -3 ../0004-keep-fspp-dither-lto.patch
+
+  # GCC 15 fix: sys/select.h not implicitly included
+  git apply -3 ../0005-fix-gcc15-sys-select.patch
 
   chmod +x ../workload.sh
 }
