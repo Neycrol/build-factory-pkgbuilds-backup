@@ -7,7 +7,7 @@ arch=(x86_64)
 url="https://fishshell.com"
 license=(GPL2)
 depends=(glibc gcc-libs ncurses pcre2)
-makedepends=(git cmake ninja clang llvm lld rust bolt) # 确保装了 llvm-bolt
+makedepends=(git cmake ninja clang llvm lld rust) # llvm-bolt not in Arch repos, BOLT skipped in CI
 provides=(fish)
 conflicts=(fish fish-git)
 source=("git+https://github.com/fish-shell/fish-shell.git")
@@ -87,6 +87,12 @@ build() {
   # === 5. Stage 4: BOLT 物理重排 (Instrumentation Mode - no perf needed) ===
   msg2 "⚡ Starting BOLT Optimization..."
 
+  # Check if llvm-bolt is available (not in standard Arch repos)
+  if ! command -v llvm-bolt &>/dev/null; then
+    msg2 "⚠️ llvm-bolt not found, skipping BOLT (PGO+LTO still applied)"
+    return 0
+  fi
+
   # 5.1 Create instrumented binary (no perf/sudo needed!)
   msg2 "Creating BOLT instrumented binary..."
   llvm-bolt build-pgo/fish -o fish.inst \
@@ -114,7 +120,7 @@ build() {
   # 5.3 Optimize with BOLT
   if [[ -s "$srcdir/bolt_data/fish.fdata" ]]; then
     msg2 "Applying BOLT optimizations..."
-    llvm-bolt build-pgo/fish -o fish.bolt \
+    llvm-build-pgo/fish -o fish.\
       -data="$srcdir/bolt_data/fish.fdata" \
       -reorder-blocks=ext-tsp \
       -reorder-functions=hfsort \
@@ -123,8 +129,8 @@ build() {
       -icf=1 \
       -dyno-stats || true
     
-    if [[ -f fish.bolt ]]; then
-      mv fish.bolt build-pgo/fish
+    if [[ -f fish.]]; then
+      mv fish.build-pgo/fish
       msg2 "✅ BOLT optimization complete!"
     else
       msg2 "⚠️ BOLT optimization failed, using PGO binary"
