@@ -144,8 +144,6 @@ fi
 
 cd "$PKG_PATH"
 
-cd "$PKG_PATH"
-
 # Replace march=native in PKGBUILD for CI (target: alderlake)
 if grep -q "march=native" PKGBUILD 2>/dev/null; then
   echo ">> Replacing march=native with march=alderlake in PKGBUILD..."
