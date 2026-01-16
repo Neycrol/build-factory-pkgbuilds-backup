@@ -36,11 +36,14 @@ makedepends=(
   python
   qt6-tools
   mesa-utils
-  # 新增构建工具
   meson
-  # 系统里的协议包仅作为保底
   wayland-protocols
   plasma-wayland-protocols
+  # KF6 components needed for build
+  kauth
+  kidletime
+  ksvg
+  vulkan-headers
 )
 provides=(kwin)
 conflicts=(kwin kwin-git)

@@ -208,9 +208,32 @@ if [[ "$PUSH_EACH" == "1" ]]; then
     # Upload directly to GitHub Releases (no git push, no race condition!)
     echo ">> Uploading to GitHub Releases..."
     if [[ -f "$ROOT_DIR/ci/gh_release.py" ]]; then
+       # Also update repo database so later tiers can find this package
+       WORK_DIR=$(mktemp -d)
+       cp "$ARTIFACT_DIR"/*.pkg.tar.zst "$WORK_DIR/" 2>/dev/null || true
+       cd "$WORK_DIR"
+       
+       # Download existing db
+       curl -sL "https://github.com/Neycrol/misaka-treasure-chest/releases/download/${RELEASE_TAG}/${REPO_NAME}.db.tar.gz" \
+         -o "${REPO_NAME}.db.tar.gz" 2>/dev/null || true
+       
+       # Add new packages
+       repo-add -R "${REPO_NAME}.db.tar.gz" *.pkg.tar.zst 2>/dev/null || true
+       cp -f "${REPO_NAME}.db.tar.gz" "${REPO_NAME}.db" 2>/dev/null || true
+       cp -f "${REPO_NAME}.files.tar.gz" "${REPO_NAME}.files" 2>/dev/null || true
+       
+       # Upload packages + updated db
        python3 "$ROOT_DIR/ci/gh_release.py" \
          "Neycrol" "misaka-treasure-chest" "${RELEASE_TAG}" "${BINREPO_TOKEN}" \
-         "$ARTIFACT_DIR"/*.pkg.tar.zst
+         *.pkg.tar.zst \
+         "${REPO_NAME}.db.tar.gz" "${REPO_NAME}.db" \
+         "${REPO_NAME}.files.tar.gz" "${REPO_NAME}.files" 2>/dev/null || \
+       python3 "$ROOT_DIR/ci/gh_release.py" \
+         "Neycrol" "misaka-treasure-chest" "${RELEASE_TAG}" "${BINREPO_TOKEN}" \
+         *.pkg.tar.zst
+       
+       cd "$ROOT_DIR"
+       rm -rf "$WORK_DIR"
     else
        echo "Warning: ci/gh_release.py not found."
     fi
