@@ -14,7 +14,7 @@ depends=(
   glibc gcc-libs qt6-base qt6-declarative qt6-wayland
   libglvnd wayland
 )
-makedepends=(git cmake ninja clang lld mesa-utils wayland-protocols plasma-wayland-protocols-git)
+makedepends=(git cmake ninja clang lld mesa-utils wayland-protocols plasma-wayland-protocols)
 provides=(libplasma)
 conflicts=(libplasma)
 source=("git+https://invent.kde.org/plasma/libplasma.git")

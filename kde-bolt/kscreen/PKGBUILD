@@ -10,7 +10,7 @@ license=(LGPL)
 depends=(
   libkscreen-git 
   kdbusaddons ki18n kxmlgui qt6-base qt6-declarative 
-  plasma-wayland-protocols-git
+  plasma-wayland-protocols
 )
 makedepends=(git cmake ninja clang lld extra-cmake-modules)
 provides=(kscreen)
