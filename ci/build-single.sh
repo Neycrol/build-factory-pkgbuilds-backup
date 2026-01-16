@@ -175,20 +175,22 @@ SigLevel = Optional TrustAll
 Server = https://github.com/Neycrol/misaka-treasure-chest/releases/download/buildfactory
 PACMAN_REPO
 
-# Pre-install packages from Releases that might not be in db yet
-echo ">> Pre-installing available packages from Releases..."
-RELEASE_URL="https://github.com/Neycrol/misaka-treasure-chest/releases/download/${RELEASE_TAG}"
-for pkg in plasma-wayland-protocols-git libkscreen-git kwin-git-bolt libplasma-git; do
-  # Find the package file
-  PKG_FILE=$(curl -sL "https://api.github.com/repos/Neycrol/misaka-treasure-chest/releases/tags/${RELEASE_TAG}" \
-    | jq -r ".assets[].name" 2>/dev/null | grep "^${pkg}-[0-9]" | head -1 || true)
-  if [[ -n "$PKG_FILE" ]]; then
-    echo ">> Found $PKG_FILE, installing..."
-    curl -sL "${RELEASE_URL}/${PKG_FILE}" -o "/tmp/${PKG_FILE}"
-    pacman -U --noconfirm "/tmp/${PKG_FILE}" 2>/dev/null || true
-    rm -f "/tmp/${PKG_FILE}"
-  fi
-done
+# Pre-install packages from Releases that might not be in db yet (only for T3)
+PRE_INSTALL="${PRE_INSTALL:-0}"
+if [[ "$PRE_INSTALL" == "1" ]]; then
+  echo ">> Pre-installing available packages from Releases..."
+  RELEASE_URL="https://github.com/Neycrol/misaka-treasure-chest/releases/download/${RELEASE_TAG}"
+  for pkg in plasma-wayland-protocols-git libkscreen-git kwin-git-bolt libplasma-git; do
+    PKG_FILE=$(curl -sL "https://api.github.com/repos/Neycrol/misaka-treasure-chest/releases/tags/${RELEASE_TAG}" \
+      | jq -r ".assets[].name" 2>/dev/null | grep "^${pkg}-[0-9]" | head -1 || true)
+    if [[ -n "$PKG_FILE" ]]; then
+      echo ">> Found $PKG_FILE, installing..."
+      curl -sL "${RELEASE_URL}/${PKG_FILE}" -o "/tmp/${PKG_FILE}"
+      pacman -U --noconfirm "/tmp/${PKG_FILE}" 2>/dev/null || true
+      rm -f "/tmp/${PKG_FILE}"
+    fi
+  done
+fi
 
 # Sync DB
 pacman -Sy || echo "Warning: Failed to sync custom repo."
@@ -221,35 +223,12 @@ if [[ "$PUSH_EACH" == "1" ]]; then
   if [[ -z "${BINREPO_TOKEN:-}" ]]; then
     echo "Warning: BINREPO_TOKEN missing, skipping upload."
   else
-    # Upload directly to GitHub Releases (no git push, no race condition!)
+    # Upload directly to GitHub Releases
     echo ">> Uploading to GitHub Releases..."
     if [[ -f "$ROOT_DIR/ci/gh_release.py" ]]; then
-       # Also update repo database so later tiers can find this package
-       WORK_DIR=$(mktemp -d)
-       cp "$ARTIFACT_DIR"/*.pkg.tar.zst "$WORK_DIR/" 2>/dev/null || true
-       cd "$WORK_DIR"
-       
-       # Download existing db
-       curl -sL "https://github.com/Neycrol/misaka-treasure-chest/releases/download/${RELEASE_TAG}/${REPO_NAME}.db.tar.gz" \
-         -o "${REPO_NAME}.db.tar.gz" 2>/dev/null || true
-       
-       # Add new packages
-       repo-add -R "${REPO_NAME}.db.tar.gz" *.pkg.tar.zst 2>/dev/null || true
-       cp -f "${REPO_NAME}.db.tar.gz" "${REPO_NAME}.db" 2>/dev/null || true
-       cp -f "${REPO_NAME}.files.tar.gz" "${REPO_NAME}.files" 2>/dev/null || true
-       
-       # Upload packages + updated db
        python3 "$ROOT_DIR/ci/gh_release.py" \
          "Neycrol" "misaka-treasure-chest" "${RELEASE_TAG}" "${BINREPO_TOKEN}" \
-         *.pkg.tar.zst \
-         "${REPO_NAME}.db.tar.gz" "${REPO_NAME}.db" \
-         "${REPO_NAME}.files.tar.gz" "${REPO_NAME}.files" 2>/dev/null || \
-       python3 "$ROOT_DIR/ci/gh_release.py" \
-         "Neycrol" "misaka-treasure-chest" "${RELEASE_TAG}" "${BINREPO_TOKEN}" \
-         *.pkg.tar.zst
-       
-       cd "$ROOT_DIR"
-       rm -rf "$WORK_DIR"
+         "$ARTIFACT_DIR"/*.pkg.tar.zst
     else
        echo "Warning: ci/gh_release.py not found."
     fi
