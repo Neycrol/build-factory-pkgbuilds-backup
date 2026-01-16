@@ -174,6 +174,22 @@ cat <<PACMAN_REPO >> /etc/pacman.conf
 SigLevel = Optional TrustAll
 Server = https://github.com/Neycrol/misaka-treasure-chest/releases/download/buildfactory
 PACMAN_REPO
+
+# Pre-install packages from Releases that might not be in db yet
+echo ">> Pre-installing available packages from Releases..."
+RELEASE_URL="https://github.com/Neycrol/misaka-treasure-chest/releases/download/${RELEASE_TAG}"
+for pkg in plasma-wayland-protocols-git libkscreen-git kwin-git-bolt libplasma-git; do
+  # Find the package file
+  PKG_FILE=$(curl -sL "https://api.github.com/repos/Neycrol/misaka-treasure-chest/releases/tags/${RELEASE_TAG}" \
+    | jq -r ".assets[].name" 2>/dev/null | grep "^${pkg}-[0-9]" | head -1 || true)
+  if [[ -n "$PKG_FILE" ]]; then
+    echo ">> Found $PKG_FILE, installing..."
+    curl -sL "${RELEASE_URL}/${PKG_FILE}" -o "/tmp/${PKG_FILE}"
+    pacman -U --noconfirm "/tmp/${PKG_FILE}" 2>/dev/null || true
+    rm -f "/tmp/${PKG_FILE}"
+  fi
+done
+
 # Sync DB
 pacman -Sy || echo "Warning: Failed to sync custom repo."
 

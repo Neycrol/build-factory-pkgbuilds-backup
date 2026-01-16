@@ -10,7 +10,7 @@ license=(LGPL)
 depends=(
   extra-cmake-modules
   karchive kconfig kguiaddons ki18n kiconthemes kio knotifications
-  kpackage ksvg kwindowsystem kirigami plasma-wayland-protocols
+  kpackage ksvg kwindowsystem kirigami plasma-wayland-protocols-git
   glibc gcc-libs qt6-base qt6-declarative qt6-wayland
   libglvnd wayland
 )
