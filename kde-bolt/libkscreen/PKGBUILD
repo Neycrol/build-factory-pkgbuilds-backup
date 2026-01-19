@@ -10,10 +10,23 @@ depends=(
   qt6-base
   qt6-wayland
   wayland
+  kcmutils
+  ksvg
+  kcrash
   # 关键依赖：必须使用我们之前编译的最新协议
   plasma-wayland-protocols-git
 )
-makedepends=(git cmake ninja clang lld extra-cmake-modules wayland-protocols qt6-tools)
+makedepends=(
+  git
+  cmake
+  ninja
+  clang
+  lld
+  extra-cmake-modules
+  wayland-protocols
+  qt6-tools
+  vulkan-headers
+)
 provides=(libkscreen)
 conflicts=(libkscreen)
 source=("git+https://invent.kde.org/plasma/libkscreen.git")
