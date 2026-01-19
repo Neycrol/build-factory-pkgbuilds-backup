@@ -24,6 +24,10 @@ makedepends=(
   clang
   lld
   extra-cmake-modules
+  kcmutils
+  kcrash
+  kimageformats
+  ksvg
   wayland-protocols
   qt6-tools
   vulkan-headers

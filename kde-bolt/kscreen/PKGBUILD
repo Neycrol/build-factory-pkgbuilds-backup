@@ -21,7 +21,20 @@ depends=(
   qt6-declarative 
   plasma-wayland-protocols-git
 )
-makedepends=(git cmake ninja clang lld extra-cmake-modules vulkan-headers)
+makedepends=(
+  git
+  cmake
+  ninja
+  clang
+  lld
+  extra-cmake-modules
+  kcmutils
+  kcrash
+  kimageformats
+  ksvg
+  plasma-framework
+  vulkan-headers
+)
 provides=(kscreen)
 conflicts=(kscreen)
 source=("git+https://invent.kde.org/plasma/kscreen.git")
