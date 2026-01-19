@@ -22,6 +22,9 @@ depends=(
   libksysguard
   milou
   ocean-sound-theme
+  kf6-kcmutils
+  kf6-svg
+  kf6-crash
 
   # 音频与媒体
   phonon-qt6          # <--- 修正这里

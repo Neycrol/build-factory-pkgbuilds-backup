@@ -14,7 +14,7 @@ options=(staticlibs !lto !debug !strip)
 _arch_upstream="https://gitlab.archlinux.org/archlinux/packaging/packages/glibc/-/raw/main"
 
 source=(
-  "git+https://sourceware.org/git/glibc.git"
+  "git+https://github.com/bminor/glibc.git"
   # 数据文件：直接从上游拉取，保证最新
   "locale.gen.txt::${_arch_upstream}/locale.gen.txt"
   "locale-gen::${_arch_upstream}/locale-gen"
