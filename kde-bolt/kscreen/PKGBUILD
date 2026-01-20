@@ -24,7 +24,7 @@ depends=(
   kcrash
   kwindowsystem
   layer-shell-qt
-  libplasma
+  libplasma-git
   libx11
   libxcb
   libxi
