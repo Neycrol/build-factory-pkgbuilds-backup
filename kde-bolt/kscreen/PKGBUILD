@@ -9,16 +9,29 @@ license=(LGPL)
 # 依赖我们刚才编好的 libkscreen-git
 depends=(
   libkscreen-git 
+  gcc-libs
+  glibc
+  kconfig
+  kcoreaddons
   kdbusaddons
   ki18n
   kimageformats
+  kirigami
+  kitemmodels
   kxmlgui
   kcmutils
   ksvg
   kcrash
-  plasma-framework
+  kwindowsystem
+  layer-shell-qt
+  libplasma-git
+  libx11
+  libxcb
+  libxi
+  plasma5support
   qt6-base
-  qt6-declarative 
+  qt6-declarative
+  wayland
   plasma-wayland-protocols-git
 )
 makedepends=(
