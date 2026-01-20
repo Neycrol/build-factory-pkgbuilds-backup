@@ -117,6 +117,7 @@ jobs:
         env:
           SKIP_IF_EXISTS: "1"
           PRE_INSTALL: "1"
+          PLASMA_BOOTSTRAP: "1"
         run: |
           chmod +x ci/build-single.sh
           ./ci/build-single.sh "${{ matrix.package }}"

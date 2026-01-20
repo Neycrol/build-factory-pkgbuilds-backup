@@ -30,6 +30,16 @@ for i in {1..3}; do
 done
 pacman -S --noconfirm --needed git sudo curl python jq base-devel openssh
 
+# Optional Plasma bootstrap for Tier 3 builds
+PLASMA_BOOTSTRAP="${PLASMA_BOOTSTRAP:-0}"
+if [[ "$PLASMA_BOOTSTRAP" == "1" ]]; then
+  echo ">> Installing Plasma environment baseline..."
+  if ! pacman -S --noconfirm --needed plasma; then
+    echo "Warning: plasma group install failed, trying plasma-meta..."
+    pacman -S --noconfirm --needed plasma-meta
+  fi
+fi
+
 # 2. Builder User
 if ! id -u builder >/dev/null 2>&1; then
   useradd -m builder
