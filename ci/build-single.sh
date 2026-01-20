@@ -30,14 +30,36 @@ for i in {1..3}; do
 done
 pacman -S --noconfirm --needed git sudo curl python jq base-devel openssh
 
-# Optional Plasma bootstrap for Tier 3 builds
+# Optional Plasma runtime bootstrap for Tier 3 builds
 PLASMA_BOOTSTRAP="${PLASMA_BOOTSTRAP:-0}"
 if [[ "$PLASMA_BOOTSTRAP" == "1" ]]; then
-  echo ">> Installing Plasma environment baseline..."
-  if ! pacman -S --noconfirm --needed plasma; then
-    echo "Warning: plasma group install failed, trying plasma-meta..."
-    pacman -S --noconfirm --needed plasma-meta
-  fi
+  echo ">> Installing Plasma runtime dependencies..."
+  PLASMA_BOOTSTRAP_PACKAGES=(
+    gcc-libs
+    glibc
+    kconfig
+    kcoreaddons
+    kdbusaddons
+    ki18n
+    kimageformats
+    kirigami
+    kitemmodels
+    kxmlgui
+    kcmutils
+    kcrash
+    ksvg
+    kwindowsystem
+    layer-shell-qt
+    libplasma
+    libx11
+    libxcb
+    libxi
+    plasma5support
+    qt6-base
+    qt6-declarative
+    wayland
+  )
+  pacman -S --noconfirm --needed "${PLASMA_BOOTSTRAP_PACKAGES[@]}"
 fi
 
 # 2. Builder User
