@@ -2,7 +2,10 @@ name: God Mode Matrix Build
 
 on:
   schedule:
-    - cron: "0 */2 * * *"
+    # Europe evening (UTC winter): 19:40
+    - cron: '40 19 * * *'
+    # US evening (UTC winter): 03:40
+    - cron: '40 3 * * *'
   workflow_dispatch:
 
 env:
