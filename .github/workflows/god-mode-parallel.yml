@@ -9,7 +9,8 @@ env:
   GOD_GCC_URL: https://github.com/Neycrol/build-factory-pkgbuilds-backup/releases/download/gcc-git-god-16/gcc-git-god-16.0.0.r20251220-1-x86_64.pkg.tar.zst
   GOD_GCC_TOKEN: ${{ github.token }}
   BINREPO_TOKEN: ${{ secrets.BINREPO_TOKEN }}
-  PUSH_EACH: "1"
+  # Keep DB/files consistent by publishing in finalize job only.
+  PUSH_EACH: "0"
   REPO_NAME: buildfactory
   RELEASE_TAG: buildfactory
 

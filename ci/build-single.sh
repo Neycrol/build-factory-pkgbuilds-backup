@@ -250,19 +250,18 @@ echo "::endgroup::"
 
 # 7. Immediate Publish
 if [[ "$PUSH_EACH" == "1" ]]; then
-  echo "::group::[Publish] Immediate Upload to GitHub Releases"
+  echo "::group::[Publish] Immediate Publish (Package + DB Sync)"
   
   if [[ -z "${BINREPO_TOKEN:-}" ]]; then
     echo "Warning: BINREPO_TOKEN missing, skipping upload."
   else
-    # Upload directly to GitHub Releases
-    echo ">> Uploading to GitHub Releases..."
-    if [[ -f "$ROOT_DIR/ci/gh_release.py" ]]; then
-       python3 "$ROOT_DIR/ci/gh_release.py" \
-         "Neycrol" "misaka-treasure-chest" "${RELEASE_TAG}" "${BINREPO_TOKEN}" \
-         "$ARTIFACT_DIR"/*.pkg.tar.zst
+    # Use publish.sh so DB/files are updated together with packages.
+    echo ">> Publishing artifacts and syncing DB/files..."
+    if [[ -f "$ROOT_DIR/ci/publish.sh" ]]; then
+       chmod +x "$ROOT_DIR/ci/publish.sh"
+       "$ROOT_DIR/ci/publish.sh" "$ARTIFACT_DIR"
     else
-       echo "Warning: ci/gh_release.py not found."
+       echo "Warning: ci/publish.sh not found."
     fi
   fi
   echo "::endgroup::"
