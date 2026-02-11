@@ -2,7 +2,7 @@
 pkgname=sing-box-master-git
 _pkgname=sing-box
 pkgver=1.12.12.r55.gb2316b5
-pkgrel=1
+pkgrel=3
 pkgdesc="Sing-box (Git) with AVX2 opt, CLI wrapper, auto subconverter & Fish completion"
 arch=('x86_64')
 url="https://sing-box.sagernet.org/"
